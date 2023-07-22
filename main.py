@@ -24,9 +24,13 @@ import typing
 
 from pathlib import Path
 
-ISSUES = 'issues'
-PROJECTS = 'projects'
-USERS = 'users'
+
+# That should go to Redmine HTTP Request lib
+
+ISSUES = Path('issues')
+PROJECTS = Path('projects')
+USERS = Path('users')
+
 
 
 def make_url(scheme, server_root : Path, resource_path, parameters, api_format='.json'):
@@ -67,14 +71,17 @@ def DELETE(url, encoding='utf-8'):
         return(f.read().decode(encoding))
 
 
-def POST(url, data : str, encoding='utf-8'):
+def POST(url, data : str, encoding='utf-8', api_format='json'):
     """!
     POST is used for creating objects.
     """
     req = u_request.Request(
                             url=url,
-                            data=bytes(data_string, encoding),
-                            method="POST"
+                            data=bytes(data, encoding),
+                            method="POST",
+                            # uncomment below if xml support is implemented
+                            # ~ headers={"Content-Type": f"application/{json}"}
+                            headers={"Content-Type": f"application/json"}
                             )
     with u_request.urlopen(req) as f:
         return(f.read().decode(encoding))
@@ -85,8 +92,11 @@ def PUT(url, data : str, encoding='utf-8'):
     """
     req = u_request.Request(
                             url=url,
-                            data=bytes(data_string, encoding),
-                            method="PUT"
+                            data=bytes(data, encoding),
+                            method="PUT",
+                            # uncomment below if xml support is implemented
+                            # ~ headers={"Content-Type": f"application/{json}"}
+                            headers={"Content-Type": f"application/json"}
                             )
     with u_request.urlopen(req) as f:
         return(f.read().decode(encoding))
