@@ -4,12 +4,6 @@ import urllib.request as u_request # TODO: make async http
 from typing import Union
 from pathlib import Path
 
-ISSUES = Path('issues')
-PROJECTS = Path('projects')
-USERS = Path('users')
-
-
-
 def make_url(scheme, server_root : Path, resource_path, parameters : dict, api_format='.json'):
     """!
     This function assembles a URL from given parameters.
