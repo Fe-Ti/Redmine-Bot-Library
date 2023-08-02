@@ -4,7 +4,13 @@ import urllib.request as u_request # TODO: make async http
 from typing import Union
 from pathlib import Path
 
-def make_url(scheme, server_root : Path, resource_path, parameters : dict, api_format='.json'):
+def make_url(
+                scheme : str,
+                server_root : Path,
+                resource_path,
+                parameters : dict | str,
+                api_format='.json'
+            ):
     """!
     This function assembles a URL from given parameters.
     """
@@ -25,7 +31,7 @@ def make_url(scheme, server_root : Path, resource_path, parameters : dict, api_f
 
 # HTTP Requests -- all of them return response string
 
-def GET(url, encoding='utf-8'):
+def GET(url : str, encoding : str ='utf-8'):
     """!
     GET is used for getting info. Returns string.
     """
@@ -33,7 +39,7 @@ def GET(url, encoding='utf-8'):
     with u_request.urlopen(req) as f:
         return(f.read().decode(encoding))
 
-def DELETE(url, encoding='utf-8'):
+def DELETE(url : str, encoding : str ='utf-8'):
     """!
     DELETE removes object, which corresponds to given URL, e.g. an issue.
     """
@@ -42,7 +48,7 @@ def DELETE(url, encoding='utf-8'):
         return(f.read().decode(encoding))
 
 
-def POST(url, data : str, encoding='utf-8', api_format='json'):
+def POST(url : str, data : str, encoding : str ='utf-8'):
     """!
     POST is used for creating objects.
     """
@@ -50,14 +56,12 @@ def POST(url, data : str, encoding='utf-8', api_format='json'):
                             url=url,
                             data=bytes(data, encoding),
                             method="POST",
-                            # uncomment below if xml support is implemented
-                            # ~ headers={"Content-Type": f"application/{json}"}
                             headers={"Content-Type": f"application/json"}
                             )
     with u_request.urlopen(req) as f:
         return(f.read().decode(encoding))
 
-def PUT(url, data : str, encoding='utf-8'):
+def PUT(url : str, data : str, encoding : str ='utf-8'):
     """!
     PUT is used for modifying objects, which correspond to given URL.
     """
@@ -65,8 +69,6 @@ def PUT(url, data : str, encoding='utf-8'):
                             url=url,
                             data=bytes(data, encoding),
                             method="PUT",
-                            # uncomment below if xml support is implemented
-                            # ~ headers={"Content-Type": f"application/{json}"}
                             headers={"Content-Type": f"application/json"}
                             )
     with u_request.urlopen(req) as f:

@@ -8,7 +8,7 @@ from main import *
         # ~ "tracker_id": 1,
         # ~ "status_id":1
     # ~ }
-# ~ }
+# ~ }\
 
 # ~ issue = {
     # ~ "issue": {
@@ -32,5 +32,8 @@ scu = ServerControlUnit(server_root, use_https=False)
 print(json.dumps(scu.get_project_list(params), indent=4, ensure_ascii=False))
 print ("-"*40)
 print(json.dumps(scu.get_issue_list(params), indent=4, ensure_ascii=False))
+params = {"key" : srvkey, "id" : 1}
+print(scu.show_project(params).to_dict())
+
 
 
