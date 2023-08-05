@@ -107,38 +107,41 @@ project (required): a hash of the project attributes, including:
 """
 class Project(RedmineObject):
     _available_attr_names = ALL_PROJECT_ATTRIBUTE_NAMES
-    def __init__(self,
-                    name : str,
-                    identifier : str,
-                    description : str = None,
-                    homepage : str = None,
-                    status : int = None,
-                    is_public : bool = True,
-                    parent_id : int = None,
-                    inherit_members : bool = False,
-                    tracker_ids : list[int] = None,
-                    enabled_module_names : list[str] = None,
-                    issue_custom_field_ids : list[int] = None,
-                    custom_fields : list[dict[str, Any]] = None,
-                    id : int = None # we don't know this thing on creation
-                ):
-        self.name : str = name
-        self.identfier : str = identfier
-        self.description : str = description
-        self.homepage : str = homepage
-        self.is_public : bool = is_public
-        self.parent_id : int = parent_id
-        self.inherit_members : bool = inherit_members
-        self.tracker_ids : list[int] = tracker_ids[:]
-        self.enabled_module_names : list[str] = enabled_module_names[:]
-        self.issue_custom_field_ids : list[int] = issue_custom_field_ids[:]
-        self.custom_field_values : dict[int, str] = custom_field_values.copy()
-        self.id : int = id
+    # ~ def __init__(self,
+                    # ~ name : str,
+                    # ~ identifier : str,
+                    # ~ description : str = None,
+                    # ~ homepage : str = None,
+                    # ~ status : int = None,
+                    # ~ is_public : bool = True,
+                    # ~ parent_id : int = None,
+                    # ~ inherit_members : bool = False,
+                    # ~ tracker_ids : list[int] = None,
+                    # ~ enabled_module_names : list[str] = None,
+                    # ~ issue_custom_field_ids : list[int] = None,
+                    # ~ custom_fields : list[dict[str, Any]] = None,
+                    # ~ id : int = None # we don't know this thing on creation
+                # ~ ):
+        # ~ self.name : str = name
+        # ~ self.identfier : str = identfier
+        # ~ self.description : str = description
+        # ~ self.homepage : str = homepage
+        # ~ self.is_public : bool = is_public
+        # ~ self.parent_id : int = parent_id
+        # ~ self.inherit_members : bool = inherit_members
+        # ~ self.tracker_ids : list[int] = tracker_ids[:]
+        # ~ self.enabled_module_names : list[str] = enabled_module_names[:]
+        # ~ self.issue_custom_field_ids : list[int] = issue_custom_field_ids[:]
+        # ~ self.custom_field_values : dict[int, str] = custom_field_values.copy()
+        # ~ self.id : int = id
+    def __init__(self, **kwargs):
+        for name, value in kwargs.items():
+            setattr(self, name, value)
         if not self.id:
             self._changed_attributes = set(self._available_attr_names)
 
-    def to_dict(self, for_updating = False):
-        return {"project" : self.__attributes_as_dict(for_updating)}
+    def to_dict(self):
+        return {"project" : self.__attributes_as_dict()}
 
 
 """
@@ -197,7 +200,7 @@ class Issue(RedmineObject):
             self._changed_attributes = set(self._available_attr_names)
 
     def to_dict(self):
-        return {"issue" : self.attributes_as_dict()}
+        return {"issue" : self.__attributes_as_dict()}
 
 
 class ServerControlUnit:
@@ -259,7 +262,7 @@ class ServerControlUnit:
         return self._get_object_list(PROJECTS, parameters, user_key)
 
     def show_project(self, parameters : Project | dict, user_key : str = None):
-        return Project(**self._show_object(PROJECTS, parameters, user_key)["project"])
+        return Project(**(self._show_object(PROJECTS, parameters, user_key)["project"]))
 
     def create_project(self, parameters : Project, user_key : str = None):
         return self._create_object(PROJECTS, parameters, user_key)
