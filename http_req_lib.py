@@ -31,45 +31,49 @@ def make_url(
 
 # HTTP Requests -- all of them return response string
 
+def  _sync_get_response(req, encoding):
+    try:
+        with u_request.urlopen(req) as f:
+            return {"data":f.read().decode(encoding), "code":f.code}
+    except u_request.HTTPError as error:
+        with error as f:
+            return {"data":f.read().decode(encoding), "code":f.code}
+            
+# todo: write async http req
+# ~ def _async_get_response():
+    # ~ pass
+
 def GET(url : str, encoding : str ='utf-8'):
     """!
     GET is used for getting info. Returns string.
     """
     req = u_request.Request(url=url, data=None, method="GET")
-    with u_request.urlopen(req) as f:
-        return(f.read().decode(encoding))
+    return _sync_get_response(req, encoding)
 
 def DELETE(url : str, encoding : str ='utf-8'):
     """!
     DELETE removes object, which corresponds to given URL, e.g. an issue.
     """
     req = u_request.Request(url=url, data=None, method="DELETE")
-    with u_request.urlopen(req) as f:
-        return(f.read().decode(encoding))
+    return _sync_get_response(req, encoding)
 
 
 def POST(url : str, data : str, encoding : str ='utf-8'):
     """!
     POST is used for creating objects.
     """
-    req = u_request.Request(
-                            url=url,
+    req = u_request.Request(url=url,
                             data=bytes(data, encoding),
                             method="POST",
-                            headers={"Content-Type": f"application/json"}
-                            )
-    with u_request.urlopen(req) as f:
-        return(f.read().decode(encoding))
+                            headers={"Content-Type": f"application/json"})
+    return _sync_get_response(req, encoding)
 
 def PUT(url : str, data : str, encoding : str ='utf-8'):
     """!
     PUT is used for modifying objects, which correspond to given URL.
     """
-    req = u_request.Request(
-                            url=url,
+    req = u_request.Request(url=url,
                             data=bytes(data, encoding),
                             method="PUT",
-                            headers={"Content-Type": f"application/json"}
-                            )
-    with u_request.urlopen(req) as f:
-        return(f.read().decode(encoding))
+                            headers={"Content-Type": f"application/json"})
+    return _sync_get_response(req, encoding)
