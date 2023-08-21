@@ -38,8 +38,8 @@ scenery_v2 = {
         "select_issue" : {
             Type    : get,
             Error   : "start",
-            Info    : "start",
-            Phrase  : "/Creating state entered... But going back to start state",
+            Info    : "select",
+            Phrase  : "",
             Set     : {"user.context":Issue},
             Input   : "data['id']",
             Next    : "start"
@@ -47,7 +47,7 @@ scenery_v2 = {
         "select_project" : {
             Type    : get,
             Error   : "start",
-            Info    : "start",
+            Info    : "select",
             Phrase  : "/Creating state entered... But going back to start state",
             Set     : {"user.context":Project},
             Input   : "data['id']",
@@ -68,8 +68,8 @@ scenery_v2 = {
     }
 }
 config = {
-    "use_https"         : True,
-    "refresh_period"    : 60, # in seconds
+    "use_https"         : False,#True,
+    "refresh_period"    : 30, # in seconds
     "sleep_timeout"     : 3600,
     "redmine_root_url"  : "localhost/redmine",
     "bot_user_key"      : "8e7a355d7f58e4b209b91d9d1f76f2a85ec4b0b6",
@@ -97,13 +97,21 @@ def get_info_msg():
 """
 
 class BotsCommands:
-    def __init__(self, bot: Bot):  # Can initialize however you like
+    def __init__(self, bot: Bot, scenery_bot):  # Can initialize however you like
         self.bot = bot
+        self.scenery_bot = scenery_bot
 
     def start(self, message):   # /start command
-        self.bot.send_message(
-            message.chat.id,
-            get_start_msg(message))
+        if message.chat.id:
+            self.scenery_bot.add_user(message.chat.id)
+            self.bot.send_message(
+                message.chat.id,
+                get_start_msg(message))
+        else:
+            self.bot.send_message(
+                message.chat.id,
+                "А я вас знаю!(с)")
+            
 
     def info(self, message):
         self.bot.send_message(
@@ -146,10 +154,16 @@ class MessageListener(Listener):  # Event listener must inherit Listener
         self.bot.send_message(
             message.chat.id,
             "Сообщение получила!")
-        self.scenery_bot.process_user_message(Message(
+        if message.chat.id not in self.scenery_bot.user_db:
+            self.bot.send_message (
             message.chat.id,
-            message.content
-            ))
+            "Гив ми старт комманд \\start")
+            return
+        else:
+            self.scenery_bot.process_user_message(Message(
+                message.chat.id,
+                message.text
+                ))
 
 
     def on_command_failure(self, message, err=None):  # When command fails
@@ -158,26 +172,27 @@ class MessageListener(Listener):  # Event listener must inherit Listener
                                   'Э-э-эм... не поняла')
         else:
             self.bot.send_message(message.chat.id,
-                                  'В команде есть ошибка:\n{err}')
+                                  f"В команде есть ошибка:\n{err}")
 
 
-if __name__ == '__main__':
-    token = (argv[1] if len(argv) > 1 else input('Enter bot token: '))
-    bot = Bot(token)   # Create instance of OrigamiBot class
-    scbot = BotCore(scenery_v2, config)   # Create instance of scenery bot
-    
-    # Add an event listener
-    bot.add_listener(MessageListener(bot))
+# ~ if __name__ == '__main__':
+token = (argv[1] if len(argv) > 1 else input('Enter bot token: '))
+bot = Bot(token)   # Create instance of OrigamiBot class
+scbot = BotCore(scenery_v2, config)   # Create instance of scenery bot
 
-    # Add a command holder
-    bot.add_commands(BotsCommands(bot))
+# Add an event listener
+bot.add_listener(MessageListener(bot,scbot))
 
-    # We can add as many command holders
-    # and event listeners as we like
+# Add a command holder
+bot.add_commands(BotsCommands(bot, scbot))
 
-    bot.start()   # start bot's threads
-    print(dir(bot))
-    while True:
-        sleep(1)
-        # Can also do some useful work i main thread
-        # Like autoposting to channels for example
+# We can add as many command holders
+# and event listeners as we like
+
+bot.start()   # start bot's threads
+scbot.start()   # start bot's threads
+print(dir(bot))
+while True:
+    sleep(1)
+    # Can also do some useful work i main thread
+    # Like autoposting to channels for example

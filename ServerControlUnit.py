@@ -11,7 +11,7 @@ from http_req_lib import u_request
 
 ISSUES = Path('issues')
 ISSUE_STATUSES = Path('issue_statuses')
-ISSUE_PRIORITIES = Path('issue_priorities')
+ISSUE_PRIORITIES = Path('enumerations/issue_priorities')
 PROJECTS = Path('projects')
 USERS = Path('users')
 # ~ = Path('')
@@ -87,6 +87,10 @@ class ServerControlUnit:
         """
         _check_type(parameters, [dict])
         parameters = self._mix_parameters(parameters, user_key)
+        logging.warning(make_url(self.http_scheme,
+                                self.server_root,
+                                api_resource,
+                                parameters))
         resp = GET(make_url(self.http_scheme,
                                 self.server_root,
                                 api_resource,

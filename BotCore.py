@@ -17,7 +17,7 @@
 #           - which are watched by user
 
 # Goals for early Alpha:
-# - Run test scenery without api calls
+# +- Run test scenery without api calls
 # - Run test scenery with functions
 # - Write 'prod' scenery
 # - Run 'prod' scenery
@@ -55,7 +55,7 @@ get = 1 # Get the value of something
 ask = 2 # Ask and choose next
 
 class SceneryNode:
-    def __init__(self, params_dict):
+    def __init__(self, params_dict, errors, infos):
         self.type = params_dict[Type] #????
         self.phrase = params_dict[Phrase]
         self.error = params_dict[Error]
@@ -88,11 +88,11 @@ class SceneryNode_Get(SceneryNode_Say):
 
         
 class SceneryGraph:
-    def __init__(self, nodes : dict):
+    def __init__(self, nodes : dict, errors, infos):
         self.nodes = dict()
         for node_name in nodes:
             if node_name not in self.nodes:
-                self.__create_Node(node_name, nodes[node_name])
+                self.__create_node(node_name, nodes[node_name])
             # Get next nodes
             next_nodes = nodes[node_name][Next]
             if not(type(next_nodes) is dict):
@@ -100,7 +100,7 @@ class SceneryGraph:
             # Iterate adding next nodes
             for next_node, lexemes in next_nodes.items():
                 if next_node not in self.nodes: # Check existance
-                    self.__create_Node(next_node, nodes[next_node])
+                    self.__create_node(next_node, nodes[next_node])
                 node = self[node_name]
                 node.add_next(self[next_node], lexemes)
                 
@@ -118,8 +118,12 @@ class SceneryGraph:
     def __getitem__(self, key):
         return self.nodes[key]
 
+    def __setitem__(self, key, value):
+        self.nodes[key] = value
+
 @dataclass
 class User:
+    uid = None
     key : str = None
     reset_if_error : bool = True # reset state when error occurs
     approve_changes : bool = True # ask user for approving 
@@ -128,7 +132,7 @@ class User:
     context_obj_id : int = None # object ID of current context (i.e. project or issue i)
     state = None # A reference to actual state
     
-    is_busy : bool = True # some sort of a lock
+    is_busy : bool = False # some sort of a lock
 
 @dataclass
 class Message:
@@ -157,8 +161,9 @@ class BotCore:
         self.bot_user_key = bot_config["bot_user_key"]
         self.refresh_period = bot_config["refresh_period"]
         self.sleep_timeout = bot_config["sleep_timeout"]
-        self.reply_function = bot_config["reply_function"]
-
+        
+        self.reply_function =reply_function
+        
         # Loading stuff from server or local database
         self.issue_statuses = self.scu.get_issue_statuses(self.bot_user_key)
         self.issue_priorities = self.scu.get_issue_priorities(self.bot_user_key)
@@ -178,7 +183,7 @@ class BotCore:
         user.context_obj_id = None
     
     def _set_user_lock(self, user, is_locked):
-        self.user_db_lock.aquire()
+        self.user_db_lock.acquire()
         try:
             user.is_busy = is_locked
         finally:
@@ -189,27 +194,36 @@ class BotCore:
         
         # Initial checks and other stuff
         content_array = shlex.split(message.content)
+        logging.warning(str(content_array))
         if not content_array:
+            logging.warning("Empty content array")
             return
         user = self.user_db[message.user_id]
         if content_array[0] in self.scenery_commands["reset"]:
+            logging.warning(f"Resetting user {user.uid}")
             self._reset_user(user)
             return
         if content_array[0] in self.scenery_commands["info"]:
-            self.reply_function(Message(message.user_id, user.state.info))
+            self.reply_function(Message(user.uid, user.state.info))
             return
         # Check and lock the user (locking may not work properly)
         if user.is_busy:
+            logging.warning(f"User {user.uid} is busy")
             return # Just forget about spammers :)
         self._set_user_lock(user=user, is_locked=True)
         
         # Here parsing magic happens
-        
-        reply = Message(user_id, "Reply!!!")
-        
+        try:
+            user.state = user.state.get_next(content_array[0])
+            reply = Message(user.uid, user.state.phrase)
+        except:
+            reply = Message(user.uid, user.state.error)
+        logging.warning(f"Reply ready for {user.uid}")
         # Reply and unlock user for further conversation
         self.reply_function(reply)
+        logging.warning(f"Replied {user.uid}")
         self._set_user_lock(user=user, is_locked=False)
+        logging.warning(f"User {user.uid} is free")
 
     def process_user_message(self, message : Message):
         if self.is_running:
@@ -226,12 +240,15 @@ class BotCore:
 
     def add_user(self, user_id):
         if user_id not in self.user_db:
-            self.user_db[user_id] = User
+            new_user = User()
+            new_user.uid = user_id
+            new_user.state = self.scenery_states[self.scenery_start_state]
+            self.user_db[user_id] = new_user
         else:
             raise ValueError(f"User with id={user_id} already exists.")
 
     def _safe_update_enums(self, new_statuses, new_priorities):
-        self.enum_lock.aquire()
+        self.enum_lock.acquire()
         try:
             self.issue_statuses = new_statuses
             self.issue_priorities = new_priorities
@@ -241,12 +258,12 @@ class BotCore:
     def update_enumerations_cycle(self):
         while self.is_running:
             time.sleep(self.refresh_period)
-            if (time.time() - self.last_msg_timestamp) < self.sleep_timeout():
+            if (time.time() - self.last_msg_timestamp) < self.sleep_timeout:
                 new_statuses = self.scu.get_issue_statuses(self.bot_user_key)
                 new_priorities = self.scu.get_issue_priorities(self.bot_user_key)
                 self._safe_update_enums(new_statuses, new_priorities)
             else:
-                while (time.time() - self.last_msg_timestamp) > self.sleep_timeout():
+                while (time.time() - self.last_msg_timestamp) > self.sleep_timeout:
                     time.sleep(0.1)
         
     def _save_db(self):
@@ -258,7 +275,7 @@ class BotCore:
         if not self.is_running:
             self.last_msg_timestamp = time.time()
             self.is_running = True
-            self.enum_updater = Thread(target=update_enumerations_cycle, daemon=False)
+            self.enum_updater = Thread(target=self.update_enumerations_cycle, daemon=False)
             self.enum_updater.start()
         else:
             raise RuntimeError("Bot is already running.")
