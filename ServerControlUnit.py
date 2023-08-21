@@ -1,45 +1,55 @@
-# (Yet another) Redmine Bot Library
-
-# Goals:
-# - use Redmine JSON REST API (maybe in future supoort XML)
-# - provide a simple bot logic which
-# - be able to:
-#     - create/delete:
-#         - projects
-#         - issues
-#     - assign issues to user
-#     - add watchers to issues
-#     - get:
-#         - project list
-#         - issues:
-#             - by number
-#             - listed in project (with filtering);
-#             - assigned to user
-#             - which are watched by user
 
 import json
 import logging
 from typing import Union, Any
 from pathlib import Path
 
+
 from http_req_lib import GET, POST, PUT, DELETE, make_url
 from http_req_lib import u_request
 
 
 ISSUES = Path('issues')
+ISSUE_STATUSES = Path('issue_statuses')
+ISSUE_PRIORITIES = Path('issue_priorities')
 PROJECTS = Path('projects')
 USERS = Path('users')
+# ~ = Path('')
+
+PROJECT_MANDATORY_KEYS = [
+                        "name",
+                        "identifier",
+                        "is_public",
+                        "tracker_ids"
+                        ]
+ISSUE_MANDATORY_KEYS = [
+                        "subject",
+                        "project_id",
+                        "tracker_id",
+                        "status_id",
+                        "priority_id"
+                        ]
 
 def _check_type(variable, acceptable_types):
     if not (type(variable) in acceptable_types):
-        raise TypeError(f"Expected {acceptable_types}, not {type(variable)}")
+        raise TypeError(f"Expected {acceptable_types}, not {type(variable)}.")
+
+def _check_mandatory_keys(dictionary, key_list):
+    """
+    Check if the dictionary has mandatory keys and if they aren't empty.
+    Function raises KeyError or ValueError if no key present or value is empty.
+    """
+    for k in key_list:
+        if k not in dictionary:
+            raise KeyError(f"Expected key {k} to be in dictionary: {dictionary}.")
+        if dictionary[k] in [None, ""]:
+            raise ValueError(f"{k} can't be empty.")
 
 class ServerControlUnit:
 
     def __init__(self, server_root : str|Path, use_https : bool = True):
         self.server_root = Path(server_root)
         self.http_scheme = "http"+"s"*use_https # I'm genious, LOL
-
 
     def _mix_parameters(self, parameters, user_key):
         """!
@@ -54,6 +64,8 @@ class ServerControlUnit:
         return parameters
 
     def _load_response(self, resp, expected_code):
+        """
+        """
         if resp["code"] == expected_code:
             if not resp["data"]:
                 return {"data" : None,
@@ -62,7 +74,7 @@ class ServerControlUnit:
                 return {"data" : json.loads(resp["data"]),
                         "success" : True }
         else:
-            logging.error(f"Expected code {expected_code}, but recieved {resp['code']}")
+            logging.error(f"Expected code {expected_code}, but recieved {resp['code']}.")
             return {"data" : resp["data"],
                     "success" : False }
 
@@ -71,6 +83,8 @@ class ServerControlUnit:
                             parameters : dict,
                             user_key : str,
                             expected_code : int = 200):
+        """
+        """
         _check_type(parameters, [dict])
         parameters = self._mix_parameters(parameters, user_key)
         resp = GET(make_url(self.http_scheme,
@@ -85,6 +99,8 @@ class ServerControlUnit:
                         parameters : dict,
                         user_key : str,
                         expected_code : int = 200):
+        """
+        """
         _check_type(parameters, [dict])
         parameters = self._mix_parameters(parameters, user_key)
         resp = GET(make_url(self.http_scheme,
@@ -99,7 +115,10 @@ class ServerControlUnit:
                         data : dict,
                         user_key : str,
                         expected_code : int = 201):
+        """
+        """
         _check_type(parameters, [dict])
+        _check_type(data, [dict])
         parameters = self._mix_parameters(parameters, user_key)
         resp = POST(make_url(self.http_scheme,
                                 self.server_root,
@@ -114,7 +133,10 @@ class ServerControlUnit:
                         data : dict,
                         user_key : str,
                         expected_code : int = 202):
+        """
+        """
         _check_type(parameters, [dict])
+        _check_type(data, [dict])
         parameters = self._mix_parameters(parameters, user_key)
         resp = PUT(make_url(self.http_scheme,
                                 self.server_root,
@@ -128,6 +150,8 @@ class ServerControlUnit:
                         object_id : int|str,
                         user_key : str,
                         expected_code : int = 204):
+        """
+        """
         _check_type(object_id, [int, str])
         parameters = {"key" : user_key}
         resp = DELETE(make_url(self.http_scheme,
@@ -138,43 +162,66 @@ class ServerControlUnit:
 
     # Project-related methods
     def get_project_list(self, parameters : dict, user_key : str = None) -> dict:
+        """
+        """
         http_resp = self._get_object_list(PROJECTS, parameters, user_key)
         return http_resp 
         # ~ return project_list_
 
     def show_project(self, parameters : dict, user_key : str = None) -> dict:
+        """
+        """
         return self._show_object(PROJECTS, parameters, user_key)
 
     def create_project(self, parameters : dict, data : dict, user_key : str = None):
+        """
+        """
         return self._create_object(PROJECTS, parameters, {"project" : data}, user_key)
 
     def update_project(self, parameters : dict, data : dict, user_key : str = None):
+        """
+        """
         return self._update_object(PROJECTS, parameters, {"project" : data}, user_key)
 
     def delete_project(self, project_id : int|str, user_key : str = None):
+        """
+        """
         return self._delete_object(PROJECTS, project_id, user_key)
 
     # Task-related methods
     def get_issue_list(self, parameters : dict, user_key : str = None):
+        """
+        """
         return self._get_object_list(ISSUES, parameters, user_key)
 
     def show_issue(self, parameters : dict, user_key : str = None):
+        """
+        """
         return self._show_object(ISSUES, parameters, user_key)
 
     def create_issue(self, parameters : dict, data : dict, user_key : str = None):
+        """
+        """
         return self._create_object(ISSUES, parameters, {"issue" : data}, user_key,data)
 
     def update_issue(self, parameters : dict, data : dict, user_key : str = None):
+        """
+        """
         return self._update_object(ISSUES, parameters, {"issue" : data}, user_key)
 
     def delete_issue(self, issue_id : int, user_key : str = None):
+        """
+        """
         return self._delete_object(ISSUES, issue_id, user_key)
 
     def add_watcher(self,
                         issue_id : int,
                         new_watcher_uid : int,
                         user_key : str = None):
+        """
+        """
         self._create_object(ISSUES / issue_id / "watchers",
+                            dict(),
                             {"user_id" : new_watcher_uid},
                             user_key)
 
@@ -182,5 +229,18 @@ class ServerControlUnit:
                         issue_id : int,
                         watcher_uid : int,
                         user_key : str = None):
-        self._delete_object(ISSUES / issue_id / "watchers" / watcher_uid,
+        """
+        """
+        self._delete_object(ISSUES / issue_id / "watchers",
+                            watcher_uid,
                             user_key)
+                            
+    def get_issue_statuses(self, user_key : str = None) -> dict:
+       return self._get_object_list(ISSUE_STATUSES,
+                                dict(),
+                                user_key)
+                            
+    def get_issue_priorities(self, user_key : str = None) -> dict:
+        return self._get_object_list(ISSUE_PRIORITIES,
+                                dict(),
+                                user_key)
