@@ -28,7 +28,7 @@ import shlex
 import time
 
 from threading import Thread, Lock, current_thread
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 from ServerControlUnit import *
 
@@ -40,8 +40,19 @@ Phrase = "Phrase" # short help. sort of  tl:dr
 Next = "Next"
 Set = "Set" # Set variables {"name" : value}
 Input = "Input"
-#Function = "Function" # function to run
+Functions = "Functions" # A list of functions to run, e.g.:
+                        # Functions: [["create","not user.approve"], reset_user]
+                        # The first will run only when expression is true
+                        # and if the function is allowed to be called.
+                        # Note: the expression is currently evaluated by eval()
+                        # Note 2: allowed functions are defined in config
 
+Properties = "Properties"   # Determines how the state is interpreted.
+                            # Is an array (list) of strings, e.g.:
+                            # Properties: [Lexeme_preserving, Phrase_formatting]
+# Property list
+Phrase_formatting = "Phrase_formatting" # If present, then phrase is formatted like f"..."
+Lexeme_preserving = "Lexeme_preserving" # If present, then lexeme is preserved for the next state
 
 # Types
 Say = 0 # Just say and go further
@@ -49,17 +60,29 @@ Get = 1 # Get the value of something
 Ask = 2 # Ask and choose next
 
 #
-Context = "context" # Context, e.g. project, issue... used as type of object
-Data = "data" # JSON data
-Parameters = "parameters" # HTTP params
+Settings = "Settings"
+Context = "Context" # Context, e.g. project, issue... used as type of object
+Key = "Key"
+Show_hints = "Show_hints"
+Approve_changes = "Approve_changes"
+Reset_if_error = "Reset_if_error"
+
+Data = "Data" # JSON data
+Parameters = "Parameters" # HTTP params
 
 # Contexts
-Issue = "issue"
-Project = "project"
+Issue = "Issue"
+Project = "Project"
+
+@dataclass
+class PropertyStruct:
+    format_phrase : bool = False
+    preserve_lexeme : bool = False
 
 class SceneryNode:
-    def __init__(self, params_dict):
-        self.type = params_dict[Type] #????
+    def __init__(self, name, params_dict):
+        self.name = name
+        self.type = params_dict[Type]
         self.phrase = params_dict[Phrase]
         self.error = params_dict[Error]
         self.info = params_dict[Info]
@@ -69,7 +92,21 @@ class SceneryNode:
         self.var_to_input = None
         if (Input in params_dict) or (self.type == Get):
             self.var_to_input = params_dict[Input]
-        self.next = dict()
+        self.function_list = list()
+        if Functions in params_dict:
+            self.function_list = params_dict[Functions][:]
+
+        self.properties = PropertyStruct()
+        if Properties in params_dict:
+            if Phrase_formatting in params_dict[Properties]:
+                self.properties.format_phrase = True
+            if Lexeme_preserving in params_dict[Properties]:
+                self.properties.preserve_lexeme = True
+        self.next : dict = dict()
+        self._next_lexemes_hint : str = str() # is used in returning hint
+
+    def __repr__(self):
+        return f"[{self.name}]"
 
     def input_var(self, variables_dict : dict, user_input):
         if not self.var_to_input:
@@ -84,24 +121,42 @@ class SceneryNode:
             return
         for category in self.vars_to_set:
             if category in variables_dict:
-                if category == Context:
-                    variables_dict[category] = self.vars_to_set[category]
-                else:
-                    for name, value in self.vars_to_set[category].items():
-                        variables_dict[category][name] = value
+                for name, value in self.vars_to_set[category].items():
+                    variables_dict[category][name] = value
 
     def add_next(self, next_node, lexemes):
         for lexeme in lexemes:
+            lexeme = lexeme.lower()
             self.next[lexeme] = next_node
 
     def get_next(self, lexeme):
-        return self.next[lexeme]
+        return self.next[lexeme.lower()]
+
+    def get_hint_string(self) -> str:
+        """
+        Returns string with list of possible next lexemes, e.g. "first, second, third"
+        """
+        if not self._next_lexemes_hint:
+            for lexeme in self.next.keys():
+                self._next_lexemes_hint += f" {lexeme},"
+            self._next_lexemes_hint = self._next_lexemes_hint[:-1]
+        return self._next_lexemes_hint
 
     def is_valid_next(self, lexeme):
-        if lexeme in self.next:
+        if lexeme.lower() in self.next:
             return True
         else:
             return False
+
+    def get_phrase(self, user):
+        if self.properties.format_phrase:
+            return self.phrase.format(**user.variables)
+        else:
+            return self.phrase
+
+    def preserve_lexeme(self):
+        return self.properties.preserve_lexeme
+
 
 class SceneryNode_Ask(SceneryNode):
     pass
@@ -121,11 +176,11 @@ class SceneryNode_Get(SceneryNode_Say):
 
 
 class SceneryGraph:
-    def __init__(self, nodes : dict, errors, infos):
+    def __init__(self, nodes : dict, phrases, errors, infos):
         self.nodes = dict()
         for node_name, node_params in nodes.items():
             if node_name not in self.nodes:
-                self._create_node(node_name, node_params, errors, infos)
+                self._create_node(node_name, node_params, phrases, errors, infos)
             # Get next nodes
             next_nodes = node_params[Next]
             if not(type(next_nodes) is dict):
@@ -133,22 +188,24 @@ class SceneryGraph:
             # Iterate adding next nodes
             for next_node, lexemes in next_nodes.items():
                 if next_node not in self.nodes: # Check existance
-                    self._create_node(next_node, nodes[next_node], errors, infos)
+                    self._create_node(next_node, nodes[next_node], phrases, errors, infos)
                 node = self[node_name]
                 node.add_next(self[next_node], lexemes)
 
-    def _create_node(self, node_name, params, errors, infos):
+    def _create_node(self, node_name, params, phrases, errors, infos):
+        if params[Phrase] in phrases:
+            params[Phrase] = phrases[params[Phrase]]
         if params[Error] in errors:
             params[Error] = errors[params[Error]]
         if params[Info] in infos:
             params[Info] = infos[params[Info]]
         ntype = params[Type]
         if ntype == Ask:
-            self[node_name] = SceneryNode_Ask(params)
+            self[node_name] = SceneryNode_Ask(node_name, params)
         elif ntype == Get:
-            self[node_name] = SceneryNode_Get(params)
+            self[node_name] = SceneryNode_Get(node_name, params)
         elif ntype == Say:
-            self[node_name] = SceneryNode_Say(params)
+            self[node_name] = SceneryNode_Say(node_name, params)
         else:
             raise TypeError(f"Can't use type {ntype} for node.")
 
@@ -160,19 +217,11 @@ class SceneryGraph:
 
 @dataclass
 class User:
-    uid = None
-    key : str = None
-    reset_if_error : bool = False # reset state when error occurs
-    # ~ approve_changes : bool = True # ask user for approving
+    uid : str = None
+    is_busy : bool = False # some sort of a lock
 
-    # ~ context_obj_id : int = None # object ID of current context (i.e. project or issue i)
     state = None # A reference to actual state
     variables : dict() = None
-    # ~ context : str = GLOBAL_CXT # current context, i.e. global, certain project (issue)
-    # ~ data : dict = None
-    # ~ parameters : dict = None
-
-    is_busy : bool = False # some sort of a lock
 
 @dataclass
 class Message:
@@ -189,13 +238,16 @@ class BotCore:
                             non-confidential data.
         """
         # From scenery:
+        self.scenery_phrases = bot_scenery["phrases"].copy()
         self.scenery_errors = bot_scenery["errors"].copy()
         self.scenery_infos = bot_scenery["infos"].copy()
         self.scenery_commands = bot_scenery["commands"].copy()
         self.scenery_states = SceneryGraph(bot_scenery["states"].copy(),
+                                            self.scenery_phrases,
                                             self.scenery_errors,
                                             self.scenery_infos)
         self.scenery_start_state = bot_scenery["start_state"]
+        self.hint_template = bot_scenery["hint_template"]
 
         # From config:
         self.scu = ServerControlUnit(   server_root=bot_config["redmine_root_url"],
@@ -203,14 +255,16 @@ class BotCore:
         self.bot_user_key = bot_config["bot_user_key"]
         self.refresh_period = bot_config["refresh_period"]
         self.sleep_timeout = bot_config["sleep_timeout"]
+        self.user_db_path = Path(bot_config["user_db_path"])
+        self.allowed_api_functions = bot_config["allowed_api_functions"][:]
 
-        self.reply_function =reply_function
+        self.reply_function = reply_function
 
         # Loading stuff from server or local database
         self.issue_statuses = self.scu.get_issue_statuses(self.bot_user_key)
         self.issue_priorities = self.scu.get_issue_priorities(self.bot_user_key)
         self.user_db : dict[str, User] = dict()
-        # TODO: load user db
+        self._load_user_db() # TODO: improve security of database
 
         # Initializing multithreading stuff
         self.enum_lock = Lock()
@@ -218,15 +272,6 @@ class BotCore:
         self.last_msg_timestamp = 0
         self.is_running = False
         self.enum_updater = None
-
-    def reset_user(self, user):
-        user.variables =    {
-                            Context : None,
-                            Data : dict(),
-                            Parameters : dict()
-                            }
-        user.state = self.scenery_states[self.scenery_start_state]
-        # ~ user.context_obj_id = None
 
     def _set_user_lock(self, user, is_locked):
         self.user_db_lock.acquire()
@@ -246,11 +291,21 @@ class BotCore:
             return
         user = self.user_db[message.user_id]
         if content_array[0] in self.scenery_commands["reset"]:
-            logging.warning(f"Resetting user {user.uid}")
-            self.reset_user(user)
+            logging.warning(f"Fully resetting user {user.uid}")
+            self.reset_user(user, keep_settings=False)
+            self.reply_function(self._get_prompt_message(user))
             return
-        if content_array[0] in self.scenery_commands["info"]:
+        elif content_array[0] in self.scenery_commands["cancel"]:
+            logging.warning(f"Resetting state and variables of user {user.uid}")
+            self.reset_user(user, keep_settings=True)
+            self.reply_function(self._get_prompt_message(user))
+            return
+        elif content_array[0] in self.scenery_commands["info"]:
             self.reply_function(Message(user.uid, user.state.info))
+            self.reply_function(self._get_prompt_message(user))
+            return
+        elif content_array[0] in self.scenery_commands["repeat"]:
+            self.reply_function(self._get_prompt_message(user))
             return
         # Check and lock the user (locking may not work properly)
 
@@ -262,11 +317,8 @@ class BotCore:
             # Here parsing magic happens
             for lex in content_array:
                 if user.state.is_valid_next(lex):
-                    user.state.set_vars(user.variables)
-                    user.state.input_var(user.variables, lex)
-                    self._call_function(user)
-                    user.state = user.state.get_next(lex)
-                    reply = Message(user.uid, user.state.phrase)
+                    self._run_state(user, lex)
+                    reply = self._get_prompt_message(user)
                 else:
                     reply = Message(user.uid, user.state.error)
                     break
@@ -282,8 +334,99 @@ class BotCore:
             self._set_user_lock(user=user, is_locked=False)
             raise error
 
+    def _get_prompt_message(self, user):
+        if user.state.type == Ask and user.variables[Settings][Show_hints]:
+            return Message( user.uid,
+                        user.state.get_phrase(user) +
+                        self.hint_template.format(user.state.get_hint_string()
+                        ))
+        else:
+            return Message( user.uid,
+                        user.state.get_phrase(user)
+                        )
+
+    def _run_state(self, user, lex):
+        while True: # TODO: Think abot limiting the cycle
+            user.state.set_vars(user.variables)
+            user.state.input_var(user.variables, lex)
+            self._call_function(user)
+            user.state = user.state.get_next(lex)
+            if not user.state.preserve_lexeme():
+                break
+            else:
+                self.reply_function(Message(user.uid, user.state.get_phrase(user)))
+
     def _call_function(self, user):
-        pass
+        state = user.state
+        # ~ self.log_to_user(user, f"Start calling functions in state {state}")
+        logging.info(f"Start calling functions in state {state}")
+        for function in state.function_list:
+            # ~ self.log_to_user(user, f"Function is {function}")
+            logging.info(f"Function is {function}")
+            if type(function) is list:
+                if (function[0] in self.allowed_api_functions) and (eval(function[1])):
+                    # Note: the code above is sort of insecure, but scenery
+                    # is owned by bot owner so if he want's to steal keys
+                    # he can just edit the code and get the dictionary
+                    getattr(self, function[0])(user)
+            elif type(function) is str:
+                if function in self.allowed_api_functions:
+                    getattr(self, function)(user)
+
+    def reset_user(self, user, keep_settings=True):
+        u_settings = {
+                        Reset_if_error      : False,
+                        Approve_changes     : False,
+                        Show_hints          : True,
+                        Key                 : None,
+                        Context             : None
+                    }
+        if keep_settings and user.variables:
+            u_settings = user.variables[Settings]
+        user.variables =    {
+                            Settings : u_settings,
+                            Data : dict(),
+                                # ~ {
+                                # ~ "project_id": 1,
+                                # ~ "subject": "Example Пример",
+                                # ~ "priority_id": 4,
+                                # ~ "tracker_id": 1,
+                                # ~ "status_id":1
+                                # ~ },
+                            Parameters : dict()
+                            }
+        user.state = self.scenery_states[self.scenery_start_state]
+        # ~ user.context_obj_id = None
+
+    def create(self, user):
+        if user.variables[Settings][Context] is Project:
+            self.scu.create_project(user.variables[Parameters],
+                                    user.variables[Data],
+                                    user.variables[Settings][Key])
+        elif user.variables[Settings][Context] is Issue:
+            self.scu.create_issue(user.variables[Parameters],
+                                    user.variables[Data],
+                                    user.variables[Settings][Key])
+    def show(self, user):
+        self.log_to_user(user,f"{__name__}")
+    def update(self, user):
+        self.log_to_user(user,f"{__name__}")
+    def delete(self, user):
+        self.log_to_user(user,f"{__name__}")
+    def get_project_list(self, user):
+        self.log_to_user(user,f"{__name__}")
+    def get_issue_list(self, user):
+        self.log_to_user(user,f"{__name__}")
+    def show_issue_statuses(self, user):
+        self.log_to_user(user,f"{__name__}")
+    def show_issue_priorities(self, user):
+        self.log_to_user(user,f"{__name__}")
+    def add_watcher(self, user):
+        self.log_to_user(user,f"{__name__}")
+    def delete_watcher(self, user):
+        self.log_to_user(user,f"{__name__}")
+    def log_to_user(self, user, log_msg):
+        self.reply_function(Message(user.uid, log_msg))
 
     def process_user_message(self, message : Message):
         if self.is_running:
@@ -295,15 +438,12 @@ class BotCore:
         else:
             raise RuntimeError("Bot is not running.")
 
-    def reply_user(self, message: Message):
-        self.reply_function(message.user_id, message.content)
-
-    def add_user(self, user_id):
+    def add_user(self, user_id : str):
         if user_id not in self.user_db:
             new_user = User()
-            new_user.uid = user_id
+            new_user.uid = str(user_id)
             self.reset_user(new_user)
-            self.user_db[user_id] = new_user
+            self.user_db[str(user_id)] = new_user # stringify id for stupid devs
         else:
             raise ValueError(f"User with id={user_id} already exists.")
 
@@ -349,12 +489,29 @@ class BotCore:
         self.reply_function = new_reply_func
 
     def restart(self):
-        stop()
-        start()
+        self.stop()
+        self.start()
 
     def shutdown(self):
-        pass
+        self.stop()
+        self._save_user_db()
 
-    def _save_db(self):
-        pass
+    def _save_user_db(self):
+        plain_udb = dict()
+        for uid, user in self.user_db.items():
+            plain_udb[uid] = asdict(user)
+            plain_udb[uid]["state"] = user.state.name
+        with open(self.user_db_path, 'w') as udb_file:
+            udb_file.write(json.dumps(plain_udb))
+
+    def _load_user_db(self):
+        try:
+            with open(self.user_db_path, 'r') as udb_file:
+                raw_data = json.loads(udb_file.read())
+            for uid, udata in raw_data.items():
+                state_name = udata.pop("state")
+                self.user_db[uid] = User(**udata)
+                self.user_db[uid].state = self.scenery_states[state_name]
+        except OSError:
+            pass
 

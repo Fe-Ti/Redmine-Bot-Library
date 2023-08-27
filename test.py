@@ -1,7 +1,24 @@
 from BotCore import *
 scenery_v2 = {
-    "start_state" : "start",
+    "start_state"   : "start",
+    "hint_template" : "\n\n>>{}",
     "states":{
+        "init1":{ # dummy
+                Type    : Say,
+                Error   : None,
+                Info    : None,
+                Phrase  : """""",
+                Next    : "init2",
+                # ~ Properties : [Lexeme_preserving]
+        },
+        "init2":{
+                Type    : Say,
+                Error   : None,
+                Info    : None,
+                Phrase  : """А пока, как сказано в Слове, "Почнёмъ же, братие, повѣсть сию" c ключа к API.""",
+                Next    : "set_key",
+                Properties : [Lexeme_preserving]
+        },
         "start" : {
             Type    : Ask,
             Error   : "start",
@@ -13,16 +30,21 @@ scenery_v2 = {
                         # ~ "show"      : ["покажи"],
                         # ~ "delete"    : ["удали"],
                         "select"    : ["выбери", "в"],
-                        # ~ "settings"  : ["запомни"]
+                        "settings"  : ["запомни", "настрой"]
                         }
         },
         "create" : {
             Type    : Say,
             Error   : "start",
             Info    : "Ошибка 404: помощь для состояния 'create' не найдена",
-            Phrase  : """Какой тип объекта ты хочешь создать? Хотя погоди... я этого пока ещё не умею :)
-Так что введи что-нибудь для возвращения назад.""",
-            Next    : "start"
+            Phrase  : """Какой тип объекта ты хочешь создать? Хотя погоди... я этого пока ещё не умею :)""",
+            Next    : "start",
+            # ~ Functions: [
+                        # ~ "create",
+                        # ~ ["show","user.variables[Settings]['reset_if_error']"],
+                        # ~ ["delete","not user.variables[Settings]['reset_if_error']"],
+                        # ~ ]
+            Properties : [Lexeme_preserving]
         },
         "select" : {
             Type    : Ask,
@@ -40,7 +62,7 @@ scenery_v2 = {
             Error   : "start",
             Info    : "select",
             Phrase  : "Введи идентификатор задачи.",
-            Set     : {Context:Issue},
+            Set     : {Settings : {Context:Issue}},
             Input   : {Data:'id'},
             Next    : "start"
         },
@@ -49,14 +71,84 @@ scenery_v2 = {
             Error   : "start",
             Info    : "select",
             Phrase  : "Введи идентификатор проекта.",
-            Set     : {Context:Project},
+            Set     : {Settings : {Context:Project}},
             Input   : {Data:'id'},
             Next    : "start"
         },
+        "settings" : {
+            Type    : Ask,
+            Error   : "start",
+            Info    : "settings",
+            Phrase  : "Что ты хочешь настроить?",
+            Next    :   {
+                        "set_key" : ["ключ"],
+                        "set_approve_mode" : ["подтверждение"],
+                        "set_behaviour" : ["поведение"]
+                        }
+        },
+        "set_key" : {
+            Type    : Get,
+            Error   : "start",
+            Info    : "settings",
+            Phrase  : "Введи свой ключ API.",
+            # ~ Set     : {Settings : {Context:Project}},
+            Input   : {Settings : Key},
+            Next    : "settings"
+        },
+        "set_behaviour" : {
+            Type    : Ask,
+            Error   : "start",
+            Info    : "settings",
+            Phrase  : "Поведение чего ты хочешь настроить?",
+            Next    :   {
+                        "set_approve_mode"   : ["подтверждения"],
+                        "set_reset_if_error" : ["сброса"]
+                        }
+        },
+        "set_approve_mode"   : {
+            Type    : Ask,
+            Error   : "start",
+            Info    : "settings",
+            Phrase  : "set_approve_mode_phrase",
+            Next    :   {
+                        "set_approve_mode_true" : ["да"],
+                        "set_approve_mode_false": ["нет"]
+                        },
+            Properties:[Phrase_formatting]
+        },
+        "set_approve_mode_true" : {
+            Type    : Say,
+            Error   : "start",
+            Info    : "Ошибка",
+            Phrase  : "setted_approve_mode",
+            Set     : {Settings : {Approve_changes:True}},
+            Next    : "settings",
+            Properties:[Lexeme_preserving,Phrase_formatting]
+        },
+        "set_approve_mode_false": {
+            Type    : Say,
+            Error   : "start",
+            Info    : "Ошибка",
+            Phrase  : "setted_approve_mode",
+            Set     : {Settings : {Approve_changes:False}},
+            Next    : "settings",
+            Properties:[Lexeme_preserving,Phrase_formatting]
+        },
+        "set_reset_if_error" : {
+            Type    : Say,
+            Error   : "start",
+            Info    : "Ошибка 404",
+            Phrase  : """rrr""",
+            Next    : "settings",
+        }
 
     },
+    "phrases": {
+        "set_approve_mode_phrase":"""Подтверждать изменения? (да/нет, сейчас установлено '{Settings[Approve_changes]}')""",
+        "setted_approve_mode":"Установила подтверждение изменений: '{Settings[Approve_changes]}'",
+    },
     "errors" : {
-        "start" : "ERRRORORORORORO!!!!1!!!111!"
+        "start" : "Запрос некорректен, проверь его."
     },
     "infos" : {
         "start" : """Команды строятся из глагола в повелительном наклонении и объекта над которым необходимо произвести действие.
@@ -70,25 +162,44 @@ scenery_v2 = {
 Чтобы я вернулась к началу и сбросила контекст и все временные переменные введи "!сброс" или "!отмена".
 Замечу, что все лексемы я разбираю аналогично командной строке, т.е. если записать в кавычках "В чащах юга жил-был цитрус...", то я интерпретирую это не как отдельные слова, а как целую строку.
 
-@Fe_Ti просил передать, что я пока умею только разбирать запросы и иногда могу падать. Поэтому при неполадках со мной обращаться к нему.
+@Fe_Ti просил передать, что я пока умею только падать. Поэтому при неполадках со мной обращаться к нему.
 """,
-        "select":"""Задание контекста нужно для того, чтобы я понимала в каком объекте я работаю."""
+        "select"    : """Задание контекста нужно для того, чтобы я понимала в каком объекте я работаю.""",
+        "settings"  : """Здесь ты можешь настроить ключ API и некоторые аспекты моего поведения (например, отключить подсказки)."""
     },
     "commands" : {
         "info"      : ["!справка", "!помощь"],
-        "reset"     : ["!сброс", "!отмена"],
-        # ~ "cancel"    : ["!отмена"]
+        "reset"     : ["!сброс"],
+        "cancel"    : ["!отмена"],
+        "repeat"    : ["!повтори"]
     }
 }
+
 config = {
-    "use_https"         : False,#True,
-    "refresh_period"    : 5, # in seconds
-    "sleep_timeout"     : 10,
-    "redmine_root_url"  : "localhost/redmine",
-    "bot_user_key"      : "8e7a355d7f58e4b209b91d9d1f76f2a85ec4b0b6",
+    "use_https"             : False,#True,
+    "refresh_period"        : 5, # in seconds
+    "sleep_timeout"         : 10,
+    "redmine_root_url"      : "localhost/redmine",
+    "bot_user_key"          : "8e7a355d7f58e4b209b91d9d1f76f2a85ec4b0b6",
+    "user_db_path"          : "./localbase.json",
+    "allowed_api_functions" : [
+                                "reset_user",
+                                "create",
+                                "show",
+                                "update",
+                                "delete",
+                                "get_project_list",
+                                "get_issue_list",
+                                "show_issue_statuses",
+                                "show_issue_priorities",
+                                "add_watcher",
+                                "delete_watcher",
+                                # ~ "set"
+                                ]
 }
 
 
+import signal
 from sys import argv
 from time import sleep
 
@@ -97,7 +208,7 @@ from origamibot.listener import Listener
 
 
 
-START_MSG = """Привет, {first_name}! Меня зовут Тасфия ‒ я бот таск-трекера Искры.
+START_MSG = """Привет, {first_name}. Меня зовут Тасфия ‒ я бот таск-трекера Искры.
 Введи "!справка" для получения справочной информации."""
 def get_start_msg(message):
     return START_MSG.format(first_name = message.chat.first_name)
@@ -116,35 +227,19 @@ class BotsCommands:
         self.scenery_bot = scenery_bot
 
     def start(self, message):   # /start command
-        if message.chat.id not in self.scenery_bot.user_db:
-            self.scenery_bot.add_user(message.chat.id)
+        uid = str(message.chat.id)
+        if uid not in self.scenery_bot.user_db:
+            self.scenery_bot.add_user(uid)
             self.bot.send_message(
                 message.chat.id,
                 get_start_msg(message))
+            self.scenery_bot.user_db[uid].state = self.scenery_bot.scenery_states["init1"]
+            self.scenery_bot.process_user_message(Message(uid,"nothing"))
         else:
             self.bot.send_message(
                 message.chat.id,
-                "А я вас знаю!(с)")
-
-
-    # ~ def info(self, message):
-        # ~ self.bot.send_message(
-            # ~ message.chat.id,
-            # ~ get_info_msg())
-
-    # ~ def echo(self, message, value: str):  # /echo [value: str] command
-        # ~ print(message)
-        # ~ print(value)
-        # ~ self.bot.send_message(
-            # ~ message.chat.id,
-            # ~ value
-            # ~ )
-
-    # ~ def add(self, message, a: float, b: float):  # /add [a: float] [b: float]
-        # ~ self.bot.send_message(
-            # ~ message.chat.id,
-            # ~ str(a + b)
-            # ~ )
+                f"""{message.chat.first_name}, на тебя дело уже заведено.
+Отправь мне "!справка", если не помнишь как со мной работать.""")
 
 
     def _not_a_command(self):   # This method not considered a command
@@ -159,16 +254,14 @@ class MessageListener(Listener):  # Event listener must inherit Listener
         self.m_count = 0
 
     def __reply_user(self, message):
-        self.bot.send_message(message.user_id, message.content)
+        self.bot.send_message(int(message.user_id), message.content)
 
     def on_message(self, message):   # called on every message
         self.m_count += 1
         print(f'Total messages: {self.m_count}')
-        # Here should be some message processing
-        # ~ self.bot.send_message(
-            # ~ message.chat.id,
-            # ~ "Сообщение получила!")
-        if (message.chat.id not in self.scenery_bot.user_db) and not(message.text.startswith("/start")):
+        
+        user_id = str(message.chat.id)
+        if (user_id not in self.scenery_bot.user_db) and not(message.text.startswith("/start")):
             self.bot.send_message (
             message.chat.id,
             "Без /start я работать не буду!")
@@ -177,7 +270,7 @@ class MessageListener(Listener):  # Event listener must inherit Listener
             pass
         else:
             self.scenery_bot.process_user_message(Message(
-                message.chat.id,
+                user_id,
                 message.text
                 ))
 
@@ -189,6 +282,7 @@ class MessageListener(Listener):  # Event listener must inherit Listener
         else:
             self.bot.send_message(message.chat.id,
                                   f"В команде есть ошибка:\n{err}")
+        raise err
 
 
 # ~ if __name__ == '__main__':
@@ -205,17 +299,21 @@ bot.add_commands(BotsCommands(bot, scbot))
 # We can add as many command holders
 # and event listeners as we like
 
+
+
+def handler(signum, frame):
+    global scbot
+    scbot.shutdown()
+    raise KeyboardInterrupt
+signal.signal(signal.SIGINT, handler)
+
+
+
 bot.start()   # start bot's threads
 scbot.start()   # start bot's threads
 # ~ print(dir(bot))
-try:
-    while True:
-        sleep(1)
-        # Can also do some useful work i main thread
-        # Like autoposting to channels for example
-except KeyboardInterrupt:
-    while scbot.is_running:
-        try:
-            scbot.stop()
-        except KeyboardInterrupt as kbip:
-            print(kbip)
+
+while True:
+    sleep(1)
+    # Can also do some useful work i main thread
+    # Like autoposting to channels for example
