@@ -400,33 +400,74 @@ class BotCore:
 
     def create(self, user):
         if user.variables[Settings][Context] is Project:
-            self.scu.create_project(user.variables[Parameters],
+            user.variables[Data] = json.loads(self.scu.create_project(user.variables[Parameters],
                                     user.variables[Data],
+                                    user.variables[Settings][Key]))
+        elif user.variables[Settings][Context] is Issue:
+            user.variables[Data] = json.loads(self.scu.create_issue(user.variables[Parameters],
+                                    user.variables[Data],
+                                    user.variables[Settings][Key]))
+    def show(self, user):
+        if user.variables[Settings][Context] is Project:
+            user.variables[Data] = json.loads(self.scu.show_project(user.variables[Parameters],
+                                    user.variables[Settings][Key]))
+        elif user.variables[Settings][Context] is Issue:
+            user.variables[Data] = json.loads(self.scu.show_issue(user.variables[Parameters],
+                                    user.variables[Settings][Key]))
+
+    def update(self, user):
+        if user.variables[Settings][Context] is Project:
+            user.variables[Data] = json.loads(self.scu.update_project(user.variables[Parameters],
+                                    user.variables[Data],
+                                    user.variables[Settings][Key]))
+        elif user.variables[Settings][Context] is Issue:
+            user.variables[Data] = json.loads(self.scu.update_issue(user.variables[Parameters],
+                                    user.variables[Data],
+                                    user.variables[Settings][Key]))
+    def delete(self, user):
+        if user.variables[Settings][Context] is Project:
+            self.scu.delete_project(user.variables[Data]["id"],
                                     user.variables[Settings][Key])
         elif user.variables[Settings][Context] is Issue:
-            self.scu.create_issue(user.variables[Parameters],
-                                    user.variables[Data],
+            self.scu.delete_issue(user.variables[Data]["id"],
                                     user.variables[Settings][Key])
-    def show(self, user):
-        self.log_to_user(user,f"{__name__}")
-    def update(self, user):
-        self.log_to_user(user,f"{__name__}")
-    def delete(self, user):
-        self.log_to_user(user,f"{__name__}")
-    def get_project_list(self, user):
-        self.log_to_user(user,f"{__name__}")
-    def get_issue_list(self, user):
-        self.log_to_user(user,f"{__name__}")
+
+    def get_project_list(self, user): # Todo: make userdefinable (sort of)
+        parameters = user.variables[Parameters]
+        key = user.variables[Settings][Key]
+        resp_data = self.scu.get_project_list(parameters, key)
+        if resp_data["success"]:
+            for project in resp_data["data"]["projects"]:
+                self.reply_function(Message(user.uid,
+                                f"""№{project['id']} "{project['name']}" ({project['identifier']})"""))
+        else:
+            self.reply_function(Message(user.uid,
+                                    "Мне не удалось получить список проектов"))
+            user.state = self.scenery_states[self.scenery_start_state]
+
+    def get_issue_list(self, user): # Todo: make userdefinable (sort of)
+        parameters = user.variables[Parameters]
+        key = user.variables[Settings][Key]
+        resp_data = self.scu.get_issue_list(parameters, key)
+        if resp_data["success"]:
+            for issue in resp_data["data"]["issues"]:
+                self.reply_function(Message(user.uid, f"""№{issue['id']} "{issue['subject']}" """))
+        else:
+            self.reply_function(Message(user.uid,
+                                    "Мне не удалось получить список задач"))
+            user.state = self.scenery_states[self.scenery_start_state]
+
     def show_issue_statuses(self, user):
-        self.log_to_user(user,f"{__name__}")
+        pass
     def show_issue_priorities(self, user):
-        self.log_to_user(user,f"{__name__}")
+        pass
     def add_watcher(self, user):
-        self.log_to_user(user,f"{__name__}")
+        pass
     def delete_watcher(self, user):
-        self.log_to_user(user,f"{__name__}")
-    def log_to_user(self, user, log_msg):
-        self.reply_function(Message(user.uid, log_msg))
+        pass
+
+    # ~ def log_to_user(self, user, log_msg):
+        # ~ self.reply_function(Message(user.uid, log_msg))
 
     def process_user_message(self, message : Message):
         if self.is_running:

@@ -24,10 +24,10 @@ scenery_v2 = {
             Error   : "start",
             Info    : "start",
             Phrase  : "Введи команду.",
-            Next    : { # "state" : [keywords]
-                        "create"    : ["создай"],
+            Next    : {
+                        # ~ "create"    : ["создай"],
                         # ~ "update"    : ["обнови","измени"],
-                        # ~ "show"      : ["покажи"],
+                        "show"      : ["покажи"],
                         # ~ "delete"    : ["удали"],
                         "select"    : ["выбери", "в"],
                         "settings"  : ["запомни", "настрой"]
@@ -39,13 +39,65 @@ scenery_v2 = {
             Info    : "Ошибка 404: помощь для состояния 'create' не найдена",
             Phrase  : """Какой тип объекта ты хочешь создать? Хотя погоди... я этого пока ещё не умею :)""",
             Next    : "start",
-            # ~ Functions: [
-                        # ~ "create",
-                        # ~ ["show","user.variables[Settings]['reset_if_error']"],
-                        # ~ ["delete","not user.variables[Settings]['reset_if_error']"],
-                        # ~ ]
             Properties : [Lexeme_preserving]
         },
+        "show" : {
+            Type    : Ask,
+            Error   : "start",
+            Info    : "Ошибка 404: помощь для состояния 'create' не найдена",
+            Phrase  : """Что ты хочешь посмотреть?""",
+            Next    : {
+                        "show_list":["список"],
+                        # ~ "show_project":["проект"],
+                        # ~ "show_issue":["задачу"],
+                        }
+        },
+        "show_list" : {
+            Type    : Ask,
+            Error   : "start",
+            Info    : "start",
+            Phrase  : """Список чего ты хочешь увидеть?""",
+            Next    : {
+                        "show_list_of_projects":["проектов"],
+                        "show_list_of_issues":["задач"]
+            }
+        },
+        "show_list_of_projects" : {
+            Type    : Say,
+            Error   : "start",
+            Info    : "start",
+            Phrase  : """Вот список проектов:""",
+            Next    : "start",
+            Functions: ["get_project_list"],
+            Properties : [Lexeme_preserving]
+        },
+        "show_list_of_issues" : {
+            Type     : Say,
+            Error    : "start",
+            Info     : "start",
+            Phrase   : """Вот список задач:""",
+            Next     : "start",
+            Functions: ["get_issue_list"],
+            Properties : [Lexeme_preserving]
+        },
+        "show_project" : {
+            Type    : Ask,
+            Error   : "start",
+            Info    : "start",
+            Phrase  : """Какой проект ты хочешь посмотреть?""",
+            Next    : {
+                        "":[""]
+                        }
+        },
+        # ~ "show_issue" : {
+            # ~ Type    : Ask,
+            # ~ Error   : "start",
+            # ~ Info    : "Ошибка 404: помощь для состояния 'create' не найдена",
+            # ~ Phrase  : """Что ты хочешь посмотреть?""",
+            # ~ Next    : {
+                        # ~ "":[""]
+                        # ~ }
+        # ~ },
         "select" : {
             Type    : Ask,
             Error   : "start",
@@ -79,11 +131,12 @@ scenery_v2 = {
             Type    : Ask,
             Error   : "start",
             Info    : "settings",
-            Phrase  : "Что ты хочешь настроить?",
+            Phrase  : "Что ты хочешь настроить? (ответ 'ничего' или '.' отправит тебя к нормальному режиму работы)",
             Next    :   {
                         "set_key" : ["ключ"],
                         "set_approve_mode" : ["подтверждение"],
-                        "set_behaviour" : ["поведение"]
+                        "set_behaviour" : ["поведение"],
+                        "start" : ["ничего", "."]
                         }
         },
         "set_key" : {
@@ -91,9 +144,16 @@ scenery_v2 = {
             Error   : "start",
             Info    : "settings",
             Phrase  : "Введи свой ключ API.",
-            # ~ Set     : {Settings : {Context:Project}},
             Input   : {Settings : Key},
-            Next    : "settings"
+            Next    : "set_key_feedback"
+        },
+        "set_key_feedback" : {
+            Type    : Say,
+            Error   : "start",
+            Info    : "settings",
+            Phrase  : "Я запомнила твой ключ. Переходим в меню настроек.",
+            Next    : "settings",
+            Properties: [Phrase_formatting, Lexeme_preserving]
         },
         "set_behaviour" : {
             Type    : Ask,
@@ -259,7 +319,7 @@ class MessageListener(Listener):  # Event listener must inherit Listener
     def on_message(self, message):   # called on every message
         self.m_count += 1
         print(f'Total messages: {self.m_count}')
-        
+
         user_id = str(message.chat.id)
         if (user_id not in self.scenery_bot.user_db) and not(message.text.startswith("/start")):
             self.bot.send_message (
