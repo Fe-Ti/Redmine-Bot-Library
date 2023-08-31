@@ -23,69 +23,40 @@
 # - Run 'prod' scenery
 
 # Then think about next goals
-
+import json
+import logging
 import shlex
 import time
 
+from pathlib import Path
 from threading import Thread, Lock, current_thread
 from dataclasses import dataclass, asdict
 
-from ServerControlUnit import *
-
-# Keywords of states
-Type = "Type"
-Error = "Error"
-Info = "Info" # help message
-Phrase = "Phrase" # short help. sort of  tl:dr
-Next = "Next"
-Set = "Set" # Set variables {"name" : value}
-Input = "Input"
-Functions = "Functions" # A list of functions to run, e.g.:
-                        # Functions: [["create","not user.approve"], reset_user]
-                        # The first will run only when expression is true
-                        # and if the function is allowed to be called.
-                        # Note: the expression is currently evaluated by eval()
-                        # Note 2: allowed functions are defined in config
-
-Properties = "Properties"   # Determines how the state is interpreted.
-                            # Is an array (list) of strings, e.g.:
-                            # Properties: [Lexeme_preserving, Phrase_formatting]
-# Property list
-Phrase_formatting = "Phrase_formatting" # If present, then phrase is formatted like f"..."
-Lexeme_preserving = "Lexeme_preserving" # If present, then lexeme is preserved for the next state
-
-# Types
-Say = 0 # Just say and go further
-Get = 1 # Get the value of something
-Ask = 2 # Ask and choose next
-
-#
-Settings = "Settings"
-Context = "Context" # Context, e.g. project, issue... used as type of object
-Key = "Key"
-Show_hints = "Show_hints"
-Approve_changes = "Approve_changes"
-Reset_if_error = "Reset_if_error"
-
-Data = "Data" # JSON data
-Parameters = "Parameters" # HTTP params
-
-# Contexts
-Issue = "Issue"
-Project = "Project"
+from bot_server_control_unit import ServerControlUnit
+from bot_lib_constants import *
+from bot_data_structs import User, Message
+from default_api_realisation import DefaultApiRealisation, DefaultTemplates
 
 @dataclass
 class PropertyStruct:
-    format_phrase : bool = False
+    format_phrase   : bool = False
     preserve_lexeme : bool = False
+    say_anyway      : bool = False
+    check_input     : bool = False
 
 class SceneryNode:
-    def __init__(self, name, params_dict):
+    def __init__(self, name, params_dict, defaults):
         self.name = name
         self.type = params_dict[Type]
-        self.phrase = params_dict[Phrase]
-        self.error = params_dict[Error]
-        self.info = params_dict[Info]
+        self.phrase = defaults[Phrase]
+        if Phrase in params_dict:
+            self.phrase = params_dict[Phrase]
+        self.error = defaults[Error]
+        if Error in params_dict:
+            self.error = params_dict[Error]
+        self.info = defaults[Info]
+        if Info in params_dict:
+            self.info = params_dict[Info]
         self.vars_to_set = None
         if Set in params_dict:
             self.vars_to_set = params_dict[Set]
@@ -102,6 +73,10 @@ class SceneryNode:
                 self.properties.format_phrase = True
             if Lexeme_preserving in params_dict[Properties]:
                 self.properties.preserve_lexeme = True
+            if Input_checking in params_dict[Properties]:
+                self.properties.check_input = True
+            if Say_anyway in params_dict[Properties]:
+                self.properties.say_anyway = True
         self.next : dict = dict()
         self._next_lexemes_hint : str = str() # is used in returning hint
 
@@ -142,7 +117,7 @@ class SceneryNode:
             self._next_lexemes_hint = self._next_lexemes_hint[:-1]
         return self._next_lexemes_hint
 
-    def is_valid_next(self, lexeme):
+    def is_valid_next(self, lexeme, user = None):
         if lexeme.lower() in self.next:
             return True
         else:
@@ -154,8 +129,14 @@ class SceneryNode:
         else:
             return self.phrase
 
+    def get_error(self, lexeme):
+        return self.error + f"\n -> {lexeme}"
+
     def preserve_lexeme(self):
         return self.properties.preserve_lexeme
+
+    def say_anyway(self):
+        return self.properties.say_anyway
 
 
 class SceneryNode_Ask(SceneryNode):
@@ -168,19 +149,38 @@ class SceneryNode_Say(SceneryNode):
     def get_next(self, lexeme = None):
         return self.next
 
-    def is_valid_next(self, lexeme):
-        return True
+    def is_valid_next(self, lexeme, user):
+        if (not self.properties.check_input) or (Check_list not in user.variables[Storage]):
+            return True
+        elif not user.variables[Storage][Check_list]:
+            return True
+        elif lexeme in user.variables[Storage][Check_list]:
+            return True
+        else:
+            return False
 
 class SceneryNode_Get(SceneryNode_Say):
     pass
 
 
 class SceneryGraph:
-    def __init__(self, nodes : dict, phrases, errors, infos):
+    def __init__(self, nodes : dict, phrases, errors, infos, root_node_name):
         self.nodes = dict()
+        defaults = {
+            Phrase : nodes[root_node_name][Phrase],
+            Error  : nodes[root_node_name][Error],
+            Info   : nodes[root_node_name][Info]
+        }
+        if Default in phrases:
+            defaults[Phrase] = phrases[Default]
+        if Default in errors:
+            defaults[Error] = errors[Default]
+        if Default in infos:
+            defaults[Info] = infos[Default]
+
         for node_name, node_params in nodes.items():
             if node_name not in self.nodes:
-                self._create_node(node_name, node_params, phrases, errors, infos)
+                self._create_node(node_name, node_params, phrases, errors, infos, defaults)
             # Get next nodes
             next_nodes = node_params[Next]
             if not(type(next_nodes) is dict):
@@ -188,11 +188,11 @@ class SceneryGraph:
             # Iterate adding next nodes
             for next_node, lexemes in next_nodes.items():
                 if next_node not in self.nodes: # Check existance
-                    self._create_node(next_node, nodes[next_node], phrases, errors, infos)
+                    self._create_node(next_node, nodes[next_node], phrases, errors, infos, defaults)
                 node = self[node_name]
                 node.add_next(self[next_node], lexemes)
 
-    def _create_node(self, node_name, params, phrases, errors, infos):
+    def _create_node(self, node_name, params, phrases, errors, infos, defaults):
         if params[Phrase] in phrases:
             params[Phrase] = phrases[params[Phrase]]
         if params[Error] in errors:
@@ -201,11 +201,11 @@ class SceneryGraph:
             params[Info] = infos[params[Info]]
         ntype = params[Type]
         if ntype == Ask:
-            self[node_name] = SceneryNode_Ask(node_name, params)
+            self[node_name] = SceneryNode_Ask(node_name, params, defaults)
         elif ntype == Get:
-            self[node_name] = SceneryNode_Get(node_name, params)
+            self[node_name] = SceneryNode_Get(node_name, params, defaults)
         elif ntype == Say:
-            self[node_name] = SceneryNode_Say(node_name, params)
+            self[node_name] = SceneryNode_Say(node_name, params, defaults)
         else:
             raise TypeError(f"Can't use type {ntype} for node.")
 
@@ -215,24 +215,13 @@ class SceneryGraph:
     def __setitem__(self, key, value):
         self.nodes[key] = value
 
-@dataclass
-class User:
-    uid : str = None
-    is_busy : bool = False # some sort of a lock
-
-    state = None # A reference to actual state
-    variables : dict() = None
-
-@dataclass
-class Message:
-    user_id : str
-    content : str
 
 class BotCore:
     def __init__(self,
                     bot_scenery : dict,
                     bot_config : dict,
-                    reply_function = None):
+                    reply_function = None,
+                    api_realisation = DefaultApiRealisation() ):
         """
         bot_user_key    -   is used for fetching enumerations and other
                             non-confidential data.
@@ -242,13 +231,15 @@ class BotCore:
         self.scenery_errors = bot_scenery["errors"].copy()
         self.scenery_infos = bot_scenery["infos"].copy()
         self.scenery_commands = bot_scenery["commands"].copy()
+        self.scenery_start_state = bot_scenery["start_state"]
         self.scenery_states = SceneryGraph(bot_scenery["states"].copy(),
                                             self.scenery_phrases,
                                             self.scenery_errors,
-                                            self.scenery_infos)
-        self.scenery_start_state = bot_scenery["start_state"]
+                                            self.scenery_infos,
+                                            self.scenery_start_state)
         self.hint_template = bot_scenery["hint_template"]
-
+        logging.warning("Scenery init finished.")
+        
         # From config:
         self.scu = ServerControlUnit(   server_root=bot_config["redmine_root_url"],
                                         use_https=bot_config["use_https"])
@@ -257,14 +248,22 @@ class BotCore:
         self.sleep_timeout = bot_config["sleep_timeout"]
         self.user_db_path = Path(bot_config["user_db_path"])
         self.allowed_api_functions = bot_config["allowed_api_functions"][:]
+        logging.warning("Config and SCU init finished.")
 
         self.reply_function = reply_function
+        logging.warning("Reply function set to {self.reply_function}.")
+        self.api_realisation = api_realisation
+        logging.warning("API realisation is set.")
+        self.api_realisation._change_bot(self)
+        logging.warning("API realisation references current bot.")
 
         # Loading stuff from server or local database
         self.issue_statuses = self.scu.get_issue_statuses(self.bot_user_key)
         self.issue_priorities = self.scu.get_issue_priorities(self.bot_user_key)
+        logging.warning("Loaded issue enums.")
         self.user_db : dict[str, User] = dict()
         self._load_user_db() # TODO: improve security of database
+        logging.warning("Loaded user database.")
 
         # Initializing multithreading stuff
         self.enum_lock = Lock()
@@ -272,6 +271,7 @@ class BotCore:
         self.last_msg_timestamp = 0
         self.is_running = False
         self.enum_updater = None
+        logging.warning("MT stuff init finished.")
 
     def _set_user_lock(self, user, is_locked):
         self.user_db_lock.acquire()
@@ -316,16 +316,36 @@ class BotCore:
         try:
             # Here parsing magic happens
             for lex in content_array:
+                print(user.state, lex)
                 if user.state.is_valid_next(lex):
                     self._run_state(user, lex)
+                    user.state = user.state.get_next(lex)
                     reply = self._get_prompt_message(user)
+                    logging.warning(f"Changed state to {user.state}")
+                    if user.state.say_anyway() and not user.state.preserve_lexeme():
+                        # ~ print("Say anyway",reply.content)###
+                        self.reply_function(reply)
+                    while user.state.preserve_lexeme(): # Jumpung through states which preserve lexeme
+                        if user.state.is_valid_next(lex):
+                            self._run_state(user, lex)
+                            if user.state.say_anyway():
+                                # ~ print("Say anyway (PL)",reply.content)
+                                self.reply_function(reply)
+                            user.state = user.state.get_next(lex)
+                            reply = self._get_prompt_message(user)
+                            logging.warning(f"Changed state to {user.state}")
+                        else:
+                            # ~ reply = Message(user.uid, user.state.get_error(lex))
+                            break
                 else:
-                    reply = Message(user.uid, user.state.error)
+                    reply = Message(user.uid, user.state.get_error(lex))
                     break
 
             logging.warning(f"Reply ready for {user.uid}")
             # Reply and unlock user for further conversation
-            self.reply_function(reply)
+            if not user.state.say_anyway(): # Just for eliminating doubles (for Say_enyway states)
+                print("Final",reply.content)
+                self.reply_function(reply)
             logging.warning(f"Replied {user.uid}")
             self._set_user_lock(user=user, is_locked=False)
             logging.warning(f"User {user.uid} is free")
@@ -346,17 +366,13 @@ class BotCore:
                         )
 
     def _run_state(self, user, lex):
-        while True: # TODO: Think abot limiting the cycle
-            user.state.set_vars(user.variables)
-            user.state.input_var(user.variables, lex)
-            self._call_function(user)
-            user.state = user.state.get_next(lex)
-            if not user.state.preserve_lexeme():
-                break
-            else:
-                self.reply_function(Message(user.uid, user.state.get_phrase(user)))
-
-    def _call_function(self, user):
+        # TODO: Think abot limiting the cycle
+        logging.warning(f"Current state is {user.state}")
+        user.state.set_vars(user.variables)
+        user.state.input_var(user.variables, lex)
+        self._call_functions(user)
+        
+    def _call_functions(self, user):
         state = user.state
         # ~ self.log_to_user(user, f"Start calling functions in state {state}")
         logging.info(f"Start calling functions in state {state}")
@@ -368,10 +384,10 @@ class BotCore:
                     # Note: the code above is sort of insecure, but scenery
                     # is owned by bot owner so if he want's to steal keys
                     # he can just edit the code and get the dictionary
-                    getattr(self, function[0])(user)
+                    getattr(self.api_realisation, function[0])(user)
             elif type(function) is str:
                 if function in self.allowed_api_functions:
-                    getattr(self, function)(user)
+                    getattr(self.api_realisation, function)(user)
 
     def reset_user(self, user, keep_settings=True):
         u_settings = {
@@ -379,95 +395,18 @@ class BotCore:
                         Approve_changes     : False,
                         Show_hints          : True,
                         Key                 : None,
-                        Context             : None
                     }
         if keep_settings and user.variables:
             u_settings = user.variables[Settings]
         user.variables =    {
                             Settings : u_settings,
                             Data : dict(),
-                                # ~ {
-                                # ~ "project_id": 1,
-                                # ~ "subject": "Example Пример",
-                                # ~ "priority_id": 4,
-                                # ~ "tracker_id": 1,
-                                # ~ "status_id":1
-                                # ~ },
-                            Parameters : dict()
+                            Parameters : dict(),
+                            Storage: {Context : Global} ## A storage for API realisation variables
+                                                        ## Just for not to interfere with Data and Parameters
                             }
         user.state = self.scenery_states[self.scenery_start_state]
         # ~ user.context_obj_id = None
-
-    def create(self, user):
-        if user.variables[Settings][Context] is Project:
-            user.variables[Data] = json.loads(self.scu.create_project(user.variables[Parameters],
-                                    user.variables[Data],
-                                    user.variables[Settings][Key]))
-        elif user.variables[Settings][Context] is Issue:
-            user.variables[Data] = json.loads(self.scu.create_issue(user.variables[Parameters],
-                                    user.variables[Data],
-                                    user.variables[Settings][Key]))
-    def show(self, user):
-        if user.variables[Settings][Context] is Project:
-            user.variables[Data] = json.loads(self.scu.show_project(user.variables[Parameters],
-                                    user.variables[Settings][Key]))
-        elif user.variables[Settings][Context] is Issue:
-            user.variables[Data] = json.loads(self.scu.show_issue(user.variables[Parameters],
-                                    user.variables[Settings][Key]))
-
-    def update(self, user):
-        if user.variables[Settings][Context] is Project:
-            user.variables[Data] = json.loads(self.scu.update_project(user.variables[Parameters],
-                                    user.variables[Data],
-                                    user.variables[Settings][Key]))
-        elif user.variables[Settings][Context] is Issue:
-            user.variables[Data] = json.loads(self.scu.update_issue(user.variables[Parameters],
-                                    user.variables[Data],
-                                    user.variables[Settings][Key]))
-    def delete(self, user):
-        if user.variables[Settings][Context] is Project:
-            self.scu.delete_project(user.variables[Data]["id"],
-                                    user.variables[Settings][Key])
-        elif user.variables[Settings][Context] is Issue:
-            self.scu.delete_issue(user.variables[Data]["id"],
-                                    user.variables[Settings][Key])
-
-    def get_project_list(self, user): # Todo: make userdefinable (sort of)
-        parameters = user.variables[Parameters]
-        key = user.variables[Settings][Key]
-        resp_data = self.scu.get_project_list(parameters, key)
-        if resp_data["success"]:
-            for project in resp_data["data"]["projects"]:
-                self.reply_function(Message(user.uid,
-                                f"""№{project['id']} "{project['name']}" ({project['identifier']})"""))
-        else:
-            self.reply_function(Message(user.uid,
-                                    "Мне не удалось получить список проектов"))
-            user.state = self.scenery_states[self.scenery_start_state]
-
-    def get_issue_list(self, user): # Todo: make userdefinable (sort of)
-        parameters = user.variables[Parameters]
-        key = user.variables[Settings][Key]
-        resp_data = self.scu.get_issue_list(parameters, key)
-        if resp_data["success"]:
-            for issue in resp_data["data"]["issues"]:
-                self.reply_function(Message(user.uid, f"""№{issue['id']} "{issue['subject']}" """))
-        else:
-            self.reply_function(Message(user.uid,
-                                    "Мне не удалось получить список задач"))
-            user.state = self.scenery_states[self.scenery_start_state]
-
-    def show_issue_statuses(self, user):
-        pass
-    def show_issue_priorities(self, user):
-        pass
-    def add_watcher(self, user):
-        pass
-    def delete_watcher(self, user):
-        pass
-
-    # ~ def log_to_user(self, user, log_msg):
-        # ~ self.reply_function(Message(user.uid, log_msg))
 
     def process_user_message(self, message : Message):
         if self.is_running:
@@ -497,8 +436,12 @@ class BotCore:
             self.enum_lock.release()
 
     def update_enumerations_cycle(self):
+        updated_at = time.time()
         while self.is_running:
-            time.sleep(self.refresh_period)
+            while (time.time() - updated_at) < self.refresh_period:
+                time.sleep(0.5)
+                if not self.is_running:
+                    return
             if (time.time() - self.last_msg_timestamp) < self.sleep_timeout:
                 new_statuses = self.scu.get_issue_statuses(self.bot_user_key)
                 new_priorities = self.scu.get_issue_priorities(self.bot_user_key)

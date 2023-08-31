@@ -17,7 +17,7 @@ scenery_v2 = {
                 Info    : None,
                 Phrase  : """А пока, как сказано в Слове, "Почнёмъ же, братие, повѣсть сию" c ключа к API.""",
                 Next    : "set_key",
-                Properties : [Lexeme_preserving]
+                Properties : [Say_anyway, Lexeme_preserving]
         },
         "start" : {
             Type    : Ask,
@@ -25,32 +25,240 @@ scenery_v2 = {
             Info    : "start",
             Phrase  : "Введи команду.",
             Next    : {
-                        # ~ "create"    : ["создай"],
+                        "create"    : ["создай"],
                         # ~ "update"    : ["обнови","измени"],
                         "show"      : ["покажи"],
                         # ~ "delete"    : ["удали"],
-                        "select"    : ["выбери", "в"],
+                        # ~ "select"    : ["выбери", "в"],
                         "settings"  : ["запомни", "настрой"]
-                        }
+                    }
         },
         "create" : {
-            Type    : Say,
+            Type    : Ask,
             Error   : "start",
-            Info    : "Ошибка 404: помощь для состояния 'create' не найдена",
-            Phrase  : """Какой тип объекта ты хочешь создать? Хотя погоди... я этого пока ещё не умею :)""",
-            Next    : "start",
+            Info    : "Здесь должна быть справка",
+            Phrase  : """Какой тип объекта ты хочешь создать?""",
+            Next    : {
+                            "create_project_init_vars":["проект"],
+                            "create_issue_init_vars":["задачу"],
+                        },
+            # ~ Properties : []
+        },
+        "create_project_init_vars" : {
+            Type    : Say,
+            Error   : None,
+            Info    : None,
+            Phrase  : """Инициализирую переменные...""",
+            Next    : "create_project_set_identifier",
+            Set     :   {
+                            Settings : { Context : Project },
+                            Data     : {
+                                "name"          : "",
+                                "identifier"    : "",
+                                "description"   : ""
+                            }
+                        },
+            Properties : [Lexeme_preserving]
+        },
+        "create_project_menu" : {
+            Type    : Ask,
+            Error   : "start",
+            Info    : "Здесь должна быть справка",
+            Phrase  : """Что ты хочешь задать в проекте?""",
+            Next    : {
+                            "create_project_set_name":["название","имя"],
+                            "create_project_set_identifier":["идентификатор", "id"],
+                            "create_project_set_description":["описание"],
+                            # ~ "create_project_set_parent_nop":["родительский"],
+                            "create_call":["готово", ".", "!"]
+                        },
+        },
+        "draft_show_project" : {
+            Type    : Say,
+            Error   : None,
+            Info    : None,
+            Phrase  : """Черновик проекта""",
+            Next    : "create_project_menu",
+            Functions: ["show_project_draft"],
+            Properties : [Lexeme_preserving]
+        },
+        "create_project_set_identifier" : {
+            Type    : Get,
+            Error   : "start",
+            Info    : "start",
+            Phrase  : """Введи идентификатор проекта.""",
+            Next    : "draft_show_project",
+            Input   : {Data:'identifier'},
+        },
+        "create_project_set_name" : {
+            Type    : Get,
+            Error   : "start",
+            Info    : "start",
+            Phrase  : """Введи название проекта.""",
+            Next    : "draft_show_project",
+            Input   : {Data:'name'},
+        },
+        "create_project_set_description" : {
+            Type    : Get,
+            Error   : "start",
+            Info    : "start",
+            Phrase  : """Введи описание проекта.""",
+            Next    : "draft_show_project",
+            Input   : {Data:'description'},
+        },
+        "create_issue_init_vars" : {
+            Type    : Ask,
+            Error   : "start",
+            Info    : "no_help",
+            Phrase  : """Инициализирую переменные... """,
+            Next    :   {
+                        "create_issue_in_project_prep" : ["в"],
+                        "create_issue_set_project_id" : ["проект"],
+                        "create_issue_set_subject" : ["тема"]
+                        },
+            Set     :   {
+                            Settings : { Context : Issue },
+                            Data     : {
+                                "project_id"    : "",
+                                "subject"       : "",
+                                "description"   : "",
+                                "start_date" : "",
+                                "due_date" : "",
+                                "status" : 1,
+                                "assigned_to" : None,
+                                "tracker" : 1,
+                                # ~ "" : "",
+                            }
+                        },
+            Properties : [Lexeme_preserving]
+        },
+        "create_issue_in_project_prep":{
+            Type    : Ask,
+            Error   : "start",
+            Info    : "Здесь должна быть справка",
+            Phrase  : """В чём?""",
+            Next    :   {
+                            "create_issue_set_project_id": ["проекте"]
+                        },
+            # ~ Properties : []
+        },
+        "create_issue_menu" : {
+            Type    : Ask,
+            Error   : "start",
+            Info    : "Здесь должна быть справка",
+            Phrase  : """Что ты хочешь поменять в задаче?""",
+            Next    : {
+                            "create_issue_set_project_id" : ["проект"],
+                            "create_issue_set_subject":["тему","тема"],
+                            "create_issue_set_description":["описание"],
+                            "create_issue_set_date":["дату","дата", "срок"],
+                            "create_issue_set_assign":["исполнителя","исполнитель"],
+                            # ~ "create_issue_set_tracker":["трекер"],
+                            "create_call":["готово", "."]
+                        },
+        },
+        "draft_show_issue" : {
+            Type    : Say,
+            Error   : None,
+            Info    : None,
+            Phrase  : """Черновик задачи""",
+            Next    : "create_issue_menu",
+            Functions: ["show_issue_draft"],
+            Properties : [Lexeme_preserving]
+        },
+        "create_issue_set_date":{
+            Type    : Ask,
+            Error   : "start",
+            Info    : "Здесь должна быть справка",
+            Phrase  : """В чём?""",
+            Next    :   {
+                            "create_issue_set_date_start": ["начала"],
+                            "create_issue_set_date_due" : ["завершения"]
+                        },
+            # ~ Properties : []
+        },
+        "create_issue_set_project_id" : {
+            Type    : Get,
+            Error   : "start",
+            Info    : "start",
+            Phrase  : """Введи идентификатор проекта.""",
+            Next    : "draft_show_issue",
+            Input   : {Data:'project_id'},
+        },
+        "create_issue_set_subject" : {
+            Type    : Get,
+            Error   : "start",
+            Info    : "start",
+            Phrase  : """Введи тему.""",
+            Next    : "draft_show_issue",
+            Input   : {Data:'subject'},
+        },
+        "create_issue_set_description" : {
+            Type    : Get,
+            Error   : "start",
+            Info    : "start",
+            Phrase  : """Введи описание.""",
+            Next    : "draft_show_issue",
+            Input   : {Data:'description'},
+        },
+        "create_issue_set_date_start" : {
+            Type    : Get,
+            Error   : "start",
+            Info    : "start",
+            Phrase  : """Введи дату начала. Например, 2023-08-02""",
+            Next    : "draft_show_issue",
+            Input   : {Data:'start_date'},
+        },
+        "create_issue_set_date_due" : {
+            Type    : Get,
+            Error   : "start",
+            Info    : "start",
+            Phrase  : """Введи срок завершения. Например, 2023-08-02""",
+            Next    : "draft_show_issue",
+            Input   : {Data:'due_date'},
+        },
+        "create_issue_set_assign" : {
+            Type    : Get,
+            Error   : "start",
+            Info    : "start",
+            Phrase  : """Введи id пользователя, которому хочешь назначить задачу.""",
+            Next    : "draft_show_issue",
+            Functions:["get_project_memberships"],
+            Input   : {Data:'assigned_to'},
+        },
+        "create_call" : {
+            Type     : Say,
+            Error    : "Мне не удалось отправить данные.",
+            Info     : "start",
+            Phrase   : """""",
+            Next     : "start",
+            Functions: ["create"],
             Properties : [Lexeme_preserving]
         },
         "show" : {
             Type    : Ask,
             Error   : "start",
-            Info    : "Ошибка 404: помощь для состояния 'create' не найдена",
+            Info    : "no_help",
             Phrase  : """Что ты хочешь посмотреть?""",
             Next    : {
                         "show_list":["список"],
-                        # ~ "show_project":["проект"],
-                        # ~ "show_issue":["задачу"],
+                        "show_project_get_id":["проект"],
+                        "show_issue_get_id":["задачу"],
+                        "show_list_of_projects":["проекты"],
+                        "show_list_of_issues":["задачи"],
+                        "show_set_me_param":["мои"],
                         }
+        },
+        "show_set_me_param" : {
+            Type    : Ask,
+            Error   : "start",
+            Info    : "start",
+            Phrase  : """Список чего ты хочешь увидеть?""",
+            Next    : {
+                        "show_list_of_projects":["проекты"],
+                        "show_list_of_issues":["задачи"]
+            },
+            Set     : { Parameters : { "assigned_to_id" : "me" } }
         },
         "show_list" : {
             Type    : Ask,
@@ -64,78 +272,59 @@ scenery_v2 = {
         },
         "show_list_of_projects" : {
             Type    : Say,
-            Error   : "start",
+            Error   : "Мне не удалось получить список проектов",
             Info    : "start",
-            Phrase  : """Вот список проектов:""",
+            Phrase  : """""",
+            Phrase  : """""",
             Next    : "start",
             Functions: ["get_project_list"],
             Properties : [Lexeme_preserving]
         },
         "show_list_of_issues" : {
             Type     : Say,
-            Error    : "start",
+            Error    : "Мне не удалось получить список задач",
             Info     : "start",
-            Phrase   : """Вот список задач:""",
+            Phrase   : """""",
             Next     : "start",
             Functions: ["get_issue_list"],
             Properties : [Lexeme_preserving]
         },
-        "show_project" : {
-            Type    : Ask,
+        "show_project_get_id" : {
+            Type    : Get,
             Error   : "start",
-            Info    : "start",
+            Info    : "no_help",
             Phrase  : """Какой проект ты хочешь посмотреть?""",
-            Next    : {
-                        "":[""]
-                        }
+            Next    : "show_call",
+            Input   : {Parameters:'id'},
+            Set     : { Settings : { Context : Project } }
         },
-        # ~ "show_issue" : {
-            # ~ Type    : Ask,
-            # ~ Error   : "start",
-            # ~ Info    : "Ошибка 404: помощь для состояния 'create' не найдена",
-            # ~ Phrase  : """Что ты хочешь посмотреть?""",
-            # ~ Next    : {
-                        # ~ "":[""]
-                        # ~ }
-        # ~ },
-        "select" : {
-            Type    : Ask,
-            Error   : "start",
-            Info    : "select",
-            Phrase  : "С каким типом объектов ты хочешь работать? С проектом или задачей?",
-            Next    : {
-                "select_issue"  : ["задачу", "задаче", "задачей"],
-                "select_project": ["проект", "проекте", "проектом"],
-                "select":["с"]
-            }
-        },
-        "select_issue" : {
+        "show_issue_get_id" : {
             Type    : Get,
             Error   : "start",
-            Info    : "select",
-            Phrase  : "Введи идентификатор задачи.",
-            Set     : {Settings : {Context:Issue}},
-            Input   : {Data:'id'},
-            Next    : "start"
+            Info    : "no_help",
+            Phrase  : """Какую задачу ты хочешь посмотреть?""",
+            Next    : "show_call",
+            Input   : {Parameters:'id'},
+            Set     : { Settings : { Context : Issue } }
         },
-        "select_project" : {
-            Type    : Get,
-            Error   : "start",
-            Info    : "select",
-            Phrase  : "Введи идентификатор проекта.",
-            Set     : {Settings : {Context:Project}},
-            Input   : {Data:'id'},
-            Next    : "start"
+        "show_call" : {
+            Type     : Say,
+            Error    : "Мне не удалось получить данные.",
+            Info     : "no_help",
+            Phrase   : """""",
+            Next     : "start",
+            Functions: ["show"],
+            Properties : [Lexeme_preserving]
         },
         "settings" : {
             Type    : Ask,
             Error   : "start",
             Info    : "settings",
-            Phrase  : "Что ты хочешь настроить? (ответ 'ничего' или '.' отправит тебя к нормальному режиму работы)",
+            Phrase  : "Что ты хочешь настроить? ('ничего' или '.' - выход из режима настройки)",
             Next    :   {
                         "set_key" : ["ключ"],
-                        "set_approve_mode" : ["подтверждение"],
-                        "set_behaviour" : ["поведение"],
+                        # ~ "set_approve_mode" : ["подтверждение"],
+                        # ~ "set_behaviour" : ["поведение"],
                         "start" : ["ничего", "."]
                         }
         },
@@ -151,56 +340,11 @@ scenery_v2 = {
             Type    : Say,
             Error   : "start",
             Info    : "settings",
-            Phrase  : "Я запомнила твой ключ. Переходим в меню настроек.",
+            Phrase  : "Я запомнила твой ключ ({Settings[Key]}). Перехожу в режим настройки.",
             Next    : "settings",
-            Properties: [Phrase_formatting, Lexeme_preserving]
+            Properties: [Phrase_formatting, Lexeme_preserving, Say_anyway]
         },
-        "set_behaviour" : {
-            Type    : Ask,
-            Error   : "start",
-            Info    : "settings",
-            Phrase  : "Поведение чего ты хочешь настроить?",
-            Next    :   {
-                        "set_approve_mode"   : ["подтверждения"],
-                        "set_reset_if_error" : ["сброса"]
-                        }
-        },
-        "set_approve_mode"   : {
-            Type    : Ask,
-            Error   : "start",
-            Info    : "settings",
-            Phrase  : "set_approve_mode_phrase",
-            Next    :   {
-                        "set_approve_mode_true" : ["да"],
-                        "set_approve_mode_false": ["нет"]
-                        },
-            Properties:[Phrase_formatting]
-        },
-        "set_approve_mode_true" : {
-            Type    : Say,
-            Error   : "start",
-            Info    : "Ошибка",
-            Phrase  : "setted_approve_mode",
-            Set     : {Settings : {Approve_changes:True}},
-            Next    : "settings",
-            Properties:[Lexeme_preserving,Phrase_formatting]
-        },
-        "set_approve_mode_false": {
-            Type    : Say,
-            Error   : "start",
-            Info    : "Ошибка",
-            Phrase  : "setted_approve_mode",
-            Set     : {Settings : {Approve_changes:False}},
-            Next    : "settings",
-            Properties:[Lexeme_preserving,Phrase_formatting]
-        },
-        "set_reset_if_error" : {
-            Type    : Say,
-            Error   : "start",
-            Info    : "Ошибка 404",
-            Phrase  : """rrr""",
-            Next    : "settings",
-        }
+
 
     },
     "phrases": {
@@ -211,34 +355,35 @@ scenery_v2 = {
         "start" : "Запрос некорректен, проверь его."
     },
     "infos" : {
-        "start" : """Команды строятся из глагола в повелительном наклонении и объекта над которым необходимо произвести действие.
-Для этого мне нужно знать контекст. Чтобы его задать перед командой можно написать "в <объекте> <id> <команда>" или "выбери <объект>..."
-Например, "в проекте 1 создай задачу". Если выбран контекст, то хватит обычной команды. Напиши одно из следующих слов:
- - создай
- - в
- - выбери
-В ответ я выдам наводящую фразу. Если нужна будет справка, то в любой момент ты можешь получить её с помощью команд "!справка" и "!помощь".
+        "no_help" : """По данному разделу справочная информация отсутствует.""",
+        "start" : "Справка",
+"""Команды строятся из глагола в повелительном наклонении и объекта над которым необходимо произвести действие.
+В ответ на незавершенную команду я выдам наводящую фразу.
 
-Чтобы я вернулась к началу и сбросила контекст и все временные переменные введи "!сброс" или "!отмена".
 Замечу, что все лексемы я разбираю аналогично командной строке, т.е. если записать в кавычках "В чащах юга жил-был цитрус...", то я интерпретирую это не как отдельные слова, а как целую строку.
 
-@Fe_Ti просил передать, что я пока умею только падать. Поэтому при неполадках со мной обращаться к нему.
-""",
+Если тебе нужна будет справка, то в любой момент ты можешь получить её с помощью слов "!справка" и "!помощь".
+Для возврата в начальное состояние - "!отмена". Чтобы сбросить не только состояние, но и настройки, отправь "!сброс".
+
+З.Ы.
+@Fe_Ti просил передать, что я пока не разучилась падать. Поэтому при неполадках со мной обращаться к нему.
+"""
         "select"    : """Задание контекста нужно для того, чтобы я понимала в каком объекте я работаю.""",
-        "settings"  : """Здесь ты можешь настроить ключ API и некоторые аспекты моего поведения (например, отключить подсказки)."""
+        "settings"  : """Здесь ты можешь настроить ключ API.
+И другие переменные, когда они появятся."""
     },
     "commands" : {
         "info"      : ["!справка", "!помощь"],
         "reset"     : ["!сброс"],
         "cancel"    : ["!отмена"],
         "repeat"    : ["!повтори"]
-    }
+    },
 }
 
 config = {
-    "use_https"             : False,#True,
-    "refresh_period"        : 5, # in seconds
+    "refresh_period"        : 1000, # in seconds
     "sleep_timeout"         : 10,
+    "use_https"             : False,
     "redmine_root_url"      : "localhost/redmine",
     "bot_user_key"          : "8e7a355d7f58e4b209b91d9d1f76f2a85ec4b0b6",
     "user_db_path"          : "./localbase.json",
@@ -255,6 +400,11 @@ config = {
                                 "add_watcher",
                                 "delete_watcher",
                                 # ~ "set"
+                                "show_project_draft",
+                                "show_issue_draft",
+                                "get_project_memberships"
+                                "show_project_draft",
+                                "show_issue_draft"
                                 ]
 }
 
@@ -314,25 +464,26 @@ class MessageListener(Listener):  # Event listener must inherit Listener
         self.m_count = 0
 
     def __reply_user(self, message):
-        self.bot.send_message(int(message.user_id), message.content)
+        self.bot.send_message(int(message.user_id), message.content)#, parse_mode="Markdown")
 
     def on_message(self, message):   # called on every message
         self.m_count += 1
         print(f'Total messages: {self.m_count}')
 
         user_id = str(message.chat.id)
-        if (user_id not in self.scenery_bot.user_db) and not(message.text.startswith("/start")):
-            self.bot.send_message (
-            message.chat.id,
-            "Без /start я работать не буду!")
-            return
-        elif message.text.startswith("/"):
-            pass
-        else:
-            self.scenery_bot.process_user_message(Message(
-                user_id,
-                message.text
-                ))
+        if type (message.text) is str:
+            if (user_id not in self.scenery_bot.user_db) and not(message.text.startswith("/start")):
+                self.bot.send_message (
+                message.chat.id,
+                "Без /start я работать не буду!")
+                return
+            elif message.text.startswith("/"):
+                pass
+            else:
+                self.scenery_bot.process_user_message(Message(
+                    user_id,
+                    message.text
+                    ))
 
 
     def on_command_failure(self, message, err=None):  # When command fails
@@ -348,7 +499,9 @@ class MessageListener(Listener):  # Event listener must inherit Listener
 # ~ if __name__ == '__main__':
 token = (argv[1] if len(argv) > 1 else input('Enter bot token: '))
 bot = Bot(token)   # Create instance of OrigamiBot class
-scbot = BotCore(scenery_v2, config)   # Create instance of scenery bot
+
+api_realisation = DefaultApiRealisation(templates=DefaultTemplates())
+scbot = BotCore(scenery_v2, config, api_realisation=api_realisation)   # Create instance of scenery bot
 
 # Add an event listener
 bot.add_listener(MessageListener(bot,scbot))
@@ -362,8 +515,9 @@ bot.add_commands(BotsCommands(bot, scbot))
 
 
 def handler(signum, frame):
-    global scbot
+    global scbot, bot
     scbot.shutdown()
+    # ~ bot.stop()
     raise KeyboardInterrupt
 signal.signal(signal.SIGINT, handler)
 
@@ -377,3 +531,81 @@ while True:
     sleep(1)
     # Can also do some useful work i main thread
     # Like autoposting to channels for example
+
+
+
+        # ~ "select" : {
+            # ~ Type    : Ask,
+            # ~ Error   : "start",
+            # ~ Info    : "select",
+            # ~ Phrase  : "С каким типом объектов ты хочешь работать? С проектом или задачей?",
+            # ~ Next    : {
+                # ~ "select_issue"  : ["задачу", "задаче", "задачей"],
+                # ~ "select_project": ["проект", "проекте", "проектом"],
+                # ~ "select":["с"]
+            # ~ }
+        # ~ },
+        # ~ "select_issue" : {
+            # ~ Type    : Get,
+            # ~ Error   : "start",
+            # ~ Info    : "select",
+            # ~ Phrase  : "Введи идентификатор задачи.",
+            # ~ Set     : {Settings : {Context:Issue}},
+            # ~ Input   : {Data:'id'},
+            # ~ Next    : "start"
+        # ~ },
+        # ~ "select_project" : {
+            # ~ Type    : Get,
+            # ~ Error   : "start",
+            # ~ Info    : "select",
+            # ~ Phrase  : "Введи идентификатор проекта.",
+            # ~ Set     : {Settings : {Context:Project}},
+            # ~ Input   : {Data:'id'},
+            # ~ Next    : "start"
+        # ~ },
+        # ~ "set_behaviour" : {
+            # ~ Type    : Ask,
+            # ~ Error   : "start",
+            # ~ Info    : "settings",
+            # ~ Phrase  : "Поведение чего ты хочешь настроить?",
+            # ~ Next    :   {
+                        # ~ "set_approve_mode"   : ["подтверждения"],
+                        # ~ "set_reset_if_error" : ["сброса"]
+                        # ~ }
+        # ~ },
+        # ~ "set_approve_mode"   : {
+            # ~ Type    : Ask,
+            # ~ Error   : "start",
+            # ~ Info    : "settings",
+            # ~ Phrase  : "set_approve_mode_phrase",
+            # ~ Next    :   {
+                        # ~ "set_approve_mode_true" : ["да"],
+                        # ~ "set_approve_mode_false": ["нет"]
+                        # ~ },
+            # ~ Properties:[Phrase_formatting]
+        # ~ },
+        # ~ "set_approve_mode_true" : {
+            # ~ Type    : Say,
+            # ~ Error   : "start",
+            # ~ Info    : "Ошибка",
+            # ~ Phrase  : "setted_approve_mode",
+            # ~ Set     : {Settings : {Approve_changes:True}},
+            # ~ Next    : "settings",
+            # ~ Properties: [Phrase_formatting, Lexeme_preserving, Say_anyway]
+        # ~ },
+        # ~ "set_approve_mode_false": {
+            # ~ Type    : Say,
+            # ~ Error   : "start",
+            # ~ Info    : "Ошибка",
+            # ~ Phrase  : "setted_approve_mode",
+            # ~ Set     : {Settings : {Approve_changes:False}},
+            # ~ Next    : "settings",
+            # ~ Properties: [Phrase_formatting, Lexeme_preserving, Say_anyway]
+        # ~ },
+        # ~ "set_reset_if_error" : {
+            # ~ Type    : Say,
+            # ~ Error   : "start",
+            # ~ Info    : "Ошибка 404",
+            # ~ Phrase  : """rrr""",
+            # ~ Next    : "settings",
+        # ~ }
