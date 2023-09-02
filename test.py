@@ -19,9 +19,14 @@ scenery_v2 = {
                 Next    : "set_key",
                 Properties : [Say_anyway, Lexeme_preserving]
         },
+        "reset_user":{
+            Type    : Say,
+            Next    : "start",
+            Functions: ["reset_user"],
+            Properties : [Lexeme_preserving]
+        },
         "start" : {
             Type    : Ask,
-            Error   : "start",
             Info    : "start",
             Phrase  : "Введи команду.",
             Next    : {
@@ -35,7 +40,6 @@ scenery_v2 = {
         },
         "create" : {
             Type    : Ask,
-            Error   : "start",
             Info    : "Здесь должна быть справка",
             Phrase  : """Какой тип объекта ты хочешь создать?""",
             Next    : {
@@ -62,7 +66,6 @@ scenery_v2 = {
         },
         "create_project_menu" : {
             Type    : Ask,
-            Error   : "start",
             Info    : "Здесь должна быть справка",
             Phrase  : """Что ты хочешь задать в проекте?""",
             Next    : {
@@ -75,8 +78,6 @@ scenery_v2 = {
         },
         "draft_show_project" : {
             Type    : Say,
-            Error   : None,
-            Info    : None,
             Phrase  : """Черновик проекта""",
             Next    : "create_project_menu",
             Functions: ["show_project_draft"],
@@ -84,7 +85,6 @@ scenery_v2 = {
         },
         "create_project_set_identifier" : {
             Type    : Get,
-            Error   : "start",
             Info    : "start",
             Phrase  : """Введи идентификатор проекта.""",
             Next    : "draft_show_project",
@@ -92,7 +92,6 @@ scenery_v2 = {
         },
         "create_project_set_name" : {
             Type    : Get,
-            Error   : "start",
             Info    : "start",
             Phrase  : """Введи название проекта.""",
             Next    : "draft_show_project",
@@ -100,7 +99,6 @@ scenery_v2 = {
         },
         "create_project_set_description" : {
             Type    : Get,
-            Error   : "start",
             Info    : "start",
             Phrase  : """Введи описание проекта.""",
             Next    : "draft_show_project",
@@ -108,7 +106,6 @@ scenery_v2 = {
         },
         "create_issue_init_vars" : {
             Type    : Ask,
-            Error   : "start",
             Info    : "no_help",
             Phrase  : """Инициализирую переменные... """,
             Next    :   {
@@ -124,9 +121,9 @@ scenery_v2 = {
                                 "description"   : "",
                                 "start_date" : "",
                                 "due_date" : "",
-                                "status" : 1,
+                                "status" : "",
                                 "assigned_to" : None,
-                                "tracker" : 1,
+                                "tracker" : "",
                                 # ~ "" : "",
                             }
                         },
@@ -134,17 +131,14 @@ scenery_v2 = {
         },
         "create_issue_in_project_prep":{
             Type    : Ask,
-            Error   : "start",
             Info    : "Здесь должна быть справка",
             Phrase  : """В чём?""",
             Next    :   {
                             "create_issue_set_project_id": ["проекте"]
                         },
-            # ~ Properties : []
         },
         "create_issue_menu" : {
             Type    : Ask,
-            Error   : "start",
             Info    : "Здесь должна быть справка",
             Phrase  : """Что ты хочешь поменять в задаче?""",
             Next    : {
@@ -153,7 +147,7 @@ scenery_v2 = {
                             "create_issue_set_description":["описание"],
                             "create_issue_set_date":["дату","дата", "срок"],
                             "create_issue_set_assign":["исполнителя","исполнитель"],
-                            # ~ "create_issue_set_tracker":["трекер"],
+                            "create_issue_set_tracker":["трекер"],
                             "create_call":["готово", "."]
                         },
         },
@@ -168,7 +162,6 @@ scenery_v2 = {
         },
         "create_issue_set_date":{
             Type    : Ask,
-            Error   : "start",
             Info    : "Здесь должна быть справка",
             Phrase  : """В чём?""",
             Next    :   {
@@ -179,7 +172,6 @@ scenery_v2 = {
         },
         "create_issue_set_project_id" : {
             Type    : Get,
-            Error   : "start",
             Info    : "start",
             Phrase  : """Введи идентификатор проекта.""",
             Next    : "draft_show_issue",
@@ -187,7 +179,6 @@ scenery_v2 = {
         },
         "create_issue_set_subject" : {
             Type    : Get,
-            Error   : "start",
             Info    : "start",
             Phrase  : """Введи тему.""",
             Next    : "draft_show_issue",
@@ -195,7 +186,6 @@ scenery_v2 = {
         },
         "create_issue_set_description" : {
             Type    : Get,
-            Error   : "start",
             Info    : "start",
             Phrase  : """Введи описание.""",
             Next    : "draft_show_issue",
@@ -203,7 +193,6 @@ scenery_v2 = {
         },
         "create_issue_set_date_start" : {
             Type    : Get,
-            Error   : "start",
             Info    : "start",
             Phrase  : """Введи дату начала. Например, 2023-08-02""",
             Next    : "draft_show_issue",
@@ -211,7 +200,6 @@ scenery_v2 = {
         },
         "create_issue_set_date_due" : {
             Type    : Get,
-            Error   : "start",
             Info    : "start",
             Phrase  : """Введи срок завершения. Например, 2023-08-02""",
             Next    : "draft_show_issue",
@@ -219,11 +207,18 @@ scenery_v2 = {
         },
         "create_issue_set_assign" : {
             Type    : Get,
-            Error   : "start",
             Info    : "start",
             Phrase  : """Введи id пользователя, которому хочешь назначить задачу.""",
             Next    : "draft_show_issue",
-            Functions:["get_project_memberships"],
+            Functions:["show_project_memberships"],
+            Input   : {Data:'assigned_to'},
+        },
+        "create_issue_set_tracker" : {
+            Type    : Get,
+            Info    : "start",
+            Phrase  : """Введи трекер.""",
+            Next    : "draft_show_issue",
+            Functions:["show_issue_trackers"],
             Input   : {Data:'assigned_to'},
         },
         "create_call" : {
@@ -231,13 +226,159 @@ scenery_v2 = {
             Error    : "Мне не удалось отправить данные.",
             Info     : "start",
             Phrase   : """""",
-            Next     : "start",
+            Next     : "reset_user",
             Functions: ["create"],
             Properties : [Lexeme_preserving]
         },
+        
+        # ~ "update" : {
+            # ~ Type    : Ask,
+            # ~ Info    : "Здесь должна быть справка",
+            # ~ Phrase  : """Какой тип объекта ты хочешь создать?""",
+            # ~ Next    : {
+                            # ~ "update_project_init_vars":["проект"],
+                            # ~ "update_issue_init_vars":["задачу"],
+                        # ~ },
+        # ~ },
+        # ~ "update_project_init_vars" : {
+            # ~ Type    : Get,
+            # ~ Error   : "data_get_error",
+            # ~ Phrase  : """Какой проект? Введи идентификатор или номер.""",
+            # ~ Next    : "update_project_menu",
+            # ~ Set     :   {
+                            # ~ Settings : { Context : Project },
+                        # ~ },
+            # ~ Get     :   {Parameters: "id"},
+            # ~ Functions   : ["get_data", ["reset_to_start","""user.variables[Storage][Success]"""]],
+            # ~ Properties  : [Lexeme_preserving]
+        # ~ },
+        # ~ "update_project_menu" : {
+            # ~ Type    : Ask,
+            # ~ Info    : "Здесь должна быть справка",
+            # ~ Phrase  : """Что ты хочешь задать в проекте?""",
+            # ~ Next    : {
+                            # ~ "update_project_set_name":["название","имя"],
+                            # ~ "update_project_set_identifier":["идентификатор", "id"],
+                            # ~ "update_project_set_description":["описание"],
+                            # ~ "update_call":["готово", ".", "!"]
+                        # ~ },
+        # ~ },
+        # ~ "draft_show_project" : {
+            # ~ Type    : Say,
+            # ~ Next    : "update_project_menu",
+            # ~ Functions: ["show_project_draft"],
+            # ~ Properties : [Lexeme_preserving]
+        # ~ },
+        # ~ "update_project_set_identifier" : {
+            # ~ Type    : Get,
+            # ~ Info    : "start",
+            # ~ Phrase  : """Введи идентификатор проекта.""",
+            # ~ Next    : "draft_show_project",
+            # ~ Input   : {Data:'identifier'},
+        # ~ },
+        # ~ "update_project_set_name" : {
+            # ~ Type    : Get,
+            # ~ Info    : "start",
+            # ~ Phrase  : """Введи название проекта.""",
+            # ~ Next    : "draft_show_project",
+            # ~ Input   : {Data:'name'},
+        # ~ },
+        # ~ "update_project_set_description" : {
+            # ~ Type    : Get,
+            # ~ Info    : "start",
+            # ~ Phrase  : """Введи описание проекта.""",
+            # ~ Next    : "draft_show_project",
+            # ~ Input   : {Data:'description'},
+        # ~ },
+        # ~ "update_issue_init_vars" : {
+            # ~ Type    : Get,
+            # ~ Info    : "no_help",
+            # ~ Phrase  : """Инициализирую переменные... """,
+            # ~ Next    : "update_issue_menu",
+            # ~ Set     :   {
+                            # ~ Settings : { Context : Issue }
+                        # ~ },
+            # ~ Get     :   {Parameters: "id"},
+            # ~ Functions   : ["get_data", ["reset_to_start","""user.variables[Storage][Success]"""]],
+            # ~ Properties : [Lexeme_preserving]
+        # ~ },
+        # ~ "update_issue_menu" : {
+            # ~ Type    : Ask,
+            # ~ Info    : "Здесь должна быть справка",
+            # ~ Phrase  : """Что ты хочешь поменять в задаче?""",
+            # ~ Next    : {
+                            # ~ "update_issue_set_project_id" : ["проект"],
+                            # ~ "update_issue_set_subject":["тему","тема"],
+                            # ~ "update_issue_set_description":["описание"],
+                            # ~ "update_issue_set_date":["дату","дата", "срок"],
+                            # ~ "update_issue_set_assign":["исполнителя","исполнитель"],
+                            # ~ "update_issue_set_tracker":["трекер"],
+                            # ~ "update_call":["готово", "."]
+                        # ~ },
+        # ~ },
+        # ~ "update_issue_set_date":{
+            # ~ Type    : Ask,
+            # ~ Info    : "Здесь должна быть справка",
+            # ~ Phrase  : """В чём?""",
+            # ~ Next    :   {
+                            # ~ "update_issue_set_date_start": ["начала"],
+                            # ~ "update_issue_set_date_due" : ["завершения"]
+                        # ~ },
+        # ~ },
+        # ~ "update_issue_set_project_id" : {
+            # ~ Type    : Get,
+            # ~ Info    : "start",
+            # ~ Phrase  : """Введи идентификатор проекта.""",
+            # ~ Next    : "draft_show_issue",
+            # ~ Input   : {Data:'project_id'},
+        # ~ },
+        # ~ "update_issue_set_subject" : {
+            # ~ Type    : Get,
+            # ~ Info    : "start",
+            # ~ Phrase  : """Введи тему.""",
+            # ~ Next    : "draft_show_issue",
+            # ~ Input   : {Data:'subject'},
+        # ~ },
+        # ~ "update_issue_set_description" : {
+            # ~ Type    : Get,
+            # ~ Info    : "start",
+            # ~ Phrase  : """Введи описание.""",
+            # ~ Next    : "draft_show_issue",
+            # ~ Input   : {Data:'description'},
+        # ~ },
+        # ~ "update_issue_set_date_start" : {
+            # ~ Type    : Get,
+            # ~ Info    : "start",
+            # ~ Phrase  : """Введи дату начала. Например, 2023-08-02""",
+            # ~ Next    : "draft_show_issue",
+            # ~ Input   : {Data:'start_date'},
+        # ~ },
+        # ~ "update_issue_set_date_due" : {
+            # ~ Type    : Get,
+            # ~ Info    : "start",
+            # ~ Phrase  : """Введи срок завершения. Например, 2023-08-02""",
+            # ~ Next    : "draft_show_issue",
+            # ~ Input   : {Data:'due_date'},
+        # ~ },
+        # ~ "update_issue_set_assign" : {
+            # ~ Type    : Get,
+            # ~ Info    : "start",
+            # ~ Phrase  : """Введи id пользователя, которому хочешь назначить задачу.""",
+            # ~ Next    : "draft_show_issue",
+            # ~ Functions:["get_project_memberships"],
+            # ~ Input   : {Data:'assigned_to'},
+        # ~ },
+        # ~ "update_call" : {
+            # ~ Type     : Say,
+            # ~ Error    : "Мне не удалось отправить данные.",
+            # ~ Info     : "start",
+            # ~ Phrase   : """""",
+            # ~ Next     : "reset_user",
+            # ~ Functions: ["update"],
+            # ~ Properties : [Lexeme_preserving]
+        # ~ },
         "show" : {
             Type    : Ask,
-            Error   : "start",
             Info    : "no_help",
             Phrase  : """Что ты хочешь посмотреть?""",
             Next    : {
@@ -251,7 +392,6 @@ scenery_v2 = {
         },
         "show_set_me_param" : {
             Type    : Ask,
-            Error   : "start",
             Info    : "start",
             Phrase  : """Список чего ты хочешь увидеть?""",
             Next    : {
@@ -262,7 +402,6 @@ scenery_v2 = {
         },
         "show_list" : {
             Type    : Ask,
-            Error   : "start",
             Info    : "start",
             Phrase  : """Список чего ты хочешь увидеть?""",
             Next    : {
@@ -273,9 +412,6 @@ scenery_v2 = {
         "show_list_of_projects" : {
             Type    : Say,
             Error   : "Мне не удалось получить список проектов",
-            Info    : "start",
-            Phrase  : """""",
-            Phrase  : """""",
             Next    : "start",
             Functions: ["get_project_list"],
             Properties : [Lexeme_preserving]
@@ -283,24 +419,23 @@ scenery_v2 = {
         "show_list_of_issues" : {
             Type     : Say,
             Error    : "Мне не удалось получить список задач",
-            Info     : "start",
-            Phrase   : """""",
             Next     : "start",
             Functions: ["get_issue_list"],
             Properties : [Lexeme_preserving]
         },
         "show_project_get_id" : {
             Type    : Get,
-            Error   : "start",
             Info    : "no_help",
             Phrase  : """Какой проект ты хочешь посмотреть?""",
             Next    : "show_call",
             Input   : {Parameters:'id'},
-            Set     : { Settings : { Context : Project } }
+            Set     :   {
+                            Settings    : { Context : Project },
+                            Parameters  : {"include": "trackers"},
+                        },
         },
         "show_issue_get_id" : {
             Type    : Get,
-            Error   : "start",
             Info    : "no_help",
             Phrase  : """Какую задачу ты хочешь посмотреть?""",
             Next    : "show_call",
@@ -309,16 +444,15 @@ scenery_v2 = {
         },
         "show_call" : {
             Type     : Say,
-            Error    : "Мне не удалось получить данные.",
+            Error    : "data_get_error",
             Info     : "no_help",
             Phrase   : """""",
-            Next     : "start",
+            Next     : "reset_user",
             Functions: ["show"],
             Properties : [Lexeme_preserving]
         },
         "settings" : {
             Type    : Ask,
-            Error   : "start",
             Info    : "settings",
             Phrase  : "Что ты хочешь настроить? ('ничего' или '.' - выход из режима настройки)",
             Next    :   {
@@ -330,7 +464,6 @@ scenery_v2 = {
         },
         "set_key" : {
             Type    : Get,
-            Error   : "start",
             Info    : "settings",
             Phrase  : "Введи свой ключ API.",
             Input   : {Settings : Key},
@@ -338,7 +471,6 @@ scenery_v2 = {
         },
         "set_key_feedback" : {
             Type    : Say,
-            Error   : "start",
             Info    : "settings",
             Phrase  : "Я запомнила твой ключ ({Settings[Key]}). Перехожу в режим настройки.",
             Next    : "settings",
@@ -348,16 +480,17 @@ scenery_v2 = {
 
     },
     "phrases": {
+        Default : "...",
         "set_approve_mode_phrase":"""Подтверждать изменения? (да/нет, сейчас установлено '{Settings[Approve_changes]}')""",
         "setted_approve_mode":"Установила подтверждение изменений: '{Settings[Approve_changes]}'",
     },
     "errors" : {
-        "start" : "Запрос некорректен, проверь его."
+        Default : "Запрос некорректен, проверь его.",
+        "data_get_error" : "Мне не удалось получить данные.",
     },
     "infos" : {
         "no_help" : """По данному разделу справочная информация отсутствует.""",
-        "start" : "Справка",
-"""Команды строятся из глагола в повелительном наклонении и объекта над которым необходимо произвести действие.
+        Default : """Команды строятся из глагола в повелительном наклонении и объекта над которым необходимо произвести действие.
 В ответ на незавершенную команду я выдам наводящую фразу.
 
 Замечу, что все лексемы я разбираю аналогично командной строке, т.е. если записать в кавычках "В чащах юга жил-был цитрус...", то я интерпретирую это не как отдельные слова, а как целую строку.
@@ -365,9 +498,9 @@ scenery_v2 = {
 Если тебе нужна будет справка, то в любой момент ты можешь получить её с помощью слов "!справка" и "!помощь".
 Для возврата в начальное состояние - "!отмена". Чтобы сбросить не только состояние, но и настройки, отправь "!сброс".
 
-З.Ы.
+P.S.
 @Fe_Ti просил передать, что я пока не разучилась падать. Поэтому при неполадках со мной обращаться к нему.
-"""
+""",
         "select"    : """Задание контекста нужно для того, чтобы я понимала в каком объекте я работаю.""",
         "settings"  : """Здесь ты можешь настроить ключ API.
 И другие переменные, когда они появятся."""
@@ -383,29 +516,29 @@ scenery_v2 = {
 config = {
     "refresh_period"        : 1000, # in seconds
     "sleep_timeout"         : 10,
-    "use_https"             : False,
-    "redmine_root_url"      : "localhost/redmine",
-    "bot_user_key"          : "8e7a355d7f58e4b209b91d9d1f76f2a85ec4b0b6",
+    # ~ "use_https"             : False,
+    # ~ "redmine_root_url"      : "localhost/redmine",
+    # ~ "bot_user_key"          : "8e7a355d7f58e4b209b91d9d1f76f2a85ec4b0b6",
     "user_db_path"          : "./localbase.json",
-    "allowed_api_functions" : [
-                                "reset_user",
-                                "create",
-                                "show",
-                                "update",
-                                "delete",
-                                "get_project_list",
-                                "get_issue_list",
-                                "show_issue_statuses",
-                                "show_issue_priorities",
-                                "add_watcher",
-                                "delete_watcher",
-                                # ~ "set"
-                                "show_project_draft",
-                                "show_issue_draft",
-                                "get_project_memberships"
-                                "show_project_draft",
-                                "show_issue_draft"
-                                ]
+    "allowed_api_functions" : []# All Functions are allowed if empty list specified
+                                # Specify None to disable function calling
+                                # ~ "reset_user",
+                                # ~ "create",
+                                # ~ "show",
+                                # ~ "update",
+                                # ~ "delete",
+                                # ~ "get_project_list",
+                                # ~ "get_issue_list",
+                                # ~ "show_issue_statuses",
+                                # ~ "show_issue_priorities",
+                                # ~ "add_watcher",
+                                # ~ "delete_watcher",
+                                # ~ "show_project_draft",
+                                # ~ "show_issue_draft",
+                                # ~ "get_project_memberships"
+                                # ~ "show_project_draft",
+                                # ~ "show_issue_draft"
+                                # ~ ]
 }
 
 

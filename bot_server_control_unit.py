@@ -7,10 +7,11 @@ from pathlib import Path
 
 from http_req_lib import GET, POST, PUT, DELETE, make_url
 from http_req_lib import u_request
-
+from bot_lib_constants import Success
 
 ISSUES = Path('issues')
 ISSUE_STATUSES = Path('issue_statuses')
+ISSUE_TRACKERS = Path('trackers')
 ISSUE_PRIORITIES = Path('enumerations/issue_priorities')
 PROJECTS = Path('projects')
 PROJECTS_MEMBERSHIPS = Path('memberships')
@@ -71,14 +72,14 @@ class ServerControlUnit:
             # ~ print(resp)
             if not resp["data"]:
                 return {"data" : None,
-                        "success" : True }
+                        Success : True }
             else:
                 return {"data" : json.loads(resp["data"]),
-                        "success" : True }
+                        Success : True }
         else:
             logging.error(f"Expected code {expected_code}, but recieved {resp['code']}.")
-            return {"data" : resp["data"],
-                    "success" : False }
+            return {"data"  : resp["data"],
+                    Success : False }
 
     def _get_object_list(self,
                             api_resource : str|Path,
@@ -240,23 +241,26 @@ class ServerControlUnit:
         self._delete_object(ISSUES / issue_id / "watchers",
                             watcher_uid,
                             user_key)
-                            
-    def get_issue_statuses(self, user_key : str = None) -> dict:
-       return self._get_object_list(ISSUE_STATUSES,
-                                        dict(),
-                                        user_key)
-                            
-    def get_issue_priorities(self, user_key : str = None) -> dict:
-        return self._get_object_list(ISSUE_PRIORITIES,
-                                        dict(),
-                                        user_key)
-                                
-    def get_trackers_priorities(self, user_key : str = None) -> dict:
-        return self._get_object_list(ISSUE_TRACKERS,
-                                        dict(),
-                                        user_key)
-
+    
     def get_project_memberships(self, project_id : int|str, user_key : str = None):
         return self._get_object_list(PROJECTS / str(project_id) / PROJECTS_MEMBERSHIPS,
                                         dict(),
                                         user_key)
+
+    def get_enum_list(self, enum_path, enum_name, user_key : str = None):
+        resp = self._get_object_list(enum_path,
+                                        dict(),
+                                        user_key)
+        if resp[Success]:
+            return resp["data"][enum_name]
+        else:
+            return list()
+            
+    def get_issue_statuses(self, user_key : str = None) -> dict:
+        return self.get_enum_list(ISSUE_STATUSES, "issue_statuses", user_key)
+    
+    def get_issue_priorities(self, user_key : str = None) -> dict:
+        return self.get_enum_list(ISSUE_PRIORITIES, "issue_priorities", user_key)
+                                
+    def get_issue_trackers(self, user_key : str = None) -> dict:
+        return self.get_enum_list(ISSUE_TRACKERS, "issue_trackers", user_key)

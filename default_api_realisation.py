@@ -4,6 +4,12 @@ import logging
 from bot_lib_constants import *
 from bot_data_structs import User, Message
 
+def get_string_from_enum_list(enum_list, template_list_entry):
+    string = str()
+    for entry in enum_list:
+        string += template_list_entry.format_map(entry)
+    return string
+
 class DefaultTemplates:
     issue = """№{id} {subject}
 
@@ -44,16 +50,21 @@ ID проекта: {project_id}
 Описание: {description}
 """
 
-    project_custom_field = """{name}: {value}
-"""
-    project_member_field = """{user[name]} (id:{user[id]}): {role_names}
-"""
+    project_custom_field = """{name}: {value}\n"""
+    project_member_field = """{user[name]} (id:{user[id]}): {role_names}\n"""
 
     issue_custom_field = project_custom_field
 
     project_list_entry = """№{id} "{name}" ({identifier})\n"""
 
     issue_list_entry = """№{id} "{subject}"\n"""
+    
+    issue_statuses = """Статусы: {}"""
+    issue_statuses_list_entry = """"\n{name}"({id})"""
+    issue_trackers = """Трекеры: {}"""
+    issue_trackers_list_entry = issue_statuses_list_entry
+    issue_priorities = """"""
+    issue_priorities_list_entry = issue_statuses_list_entry
 
 class DefaultApiRealisation:
     def __init__(self, bot = None, templates = DefaultTemplates()):
@@ -76,10 +87,40 @@ class DefaultApiRealisation:
                 else:
                     del dictionary[k]
 
+    ### Functions which don't use redmine API
     def reset_user(self, user):
         print(user.state)
-        self.bot.reset_user(user, keep_settings=True)
+        self.bot.reset_user(user, keep_settings=True, reset_state=False)
         print(user.state)
+
+    def push_state_to_stack(self, user):
+        storage = user.variables[Storage]
+        if State_stack not in storage:
+            storage[State_stack] = list()
+        if JMP_state in storage:
+            storage[State_stack].append(user.state.name)
+            user.state = self.bot.scenery_states[storage[JMP_state]]
+
+    def pop_state_from_tack(self, user):
+        storage = user.variables[Storage]
+        if State_stack not in storage:
+            logging.warning("No stack initialized. (User:{user.uid})")
+            return
+        if not storage[State_stack]:
+            logging.warning(f"Stack is empty. (User:{user.uid})")
+            return
+        state_name = storage[State_stack].pop()
+        user.state = self.bot.scenery_states[state_name]
+
+    def call_state(self, user):
+        push_state_to_stack()
+        self.bot._run_state(user)
+        pop_state_from_stack()
+
+    def reset_to_start(self, user):
+        self.bot.reset_user(user, keep_settings=True, reset_state=True)
+
+    ### Functions which call ServerControlUnit functions (i.e. use RM API)
 
     def create(self, user):
         bot = self.bot
@@ -92,71 +133,94 @@ class DefaultApiRealisation:
             bot.scu.create_issue(user.variables[Parameters],
                                     user.variables[Data],
                                     user.variables[Settings][Key])
-    def show(self, user):
-        bot = self.bot
-        resp_data : dict = dict()
-        template : str = None
-        resp_data = dict()
-        if user.variables[Settings][Context] is Project:
+
+    def show_project(self, user, resp_data=None):
+        if not resp_data:
             resp_data = bot.scu.show_project(user.variables[Parameters],
                                     user.variables[Settings][Key])
-            if resp_data["success"]:
-                project = resp_data["data"]["project"]
-                string = self.templates.project.format_map(project)
-                if "custom_fields" in project:
-                    for custom_field in project["custom_fields"]:
-                        string += self.templates.project_custom_field.format_map(custom_field)
-                string += self._get_project_memberships(user, project["id"])
-        
-        elif user.variables[Settings][Context] is Issue:
+        if resp_data[Success]:
+            project = resp_data["data"]["project"]
+            string = self.templates.project.format_map(project)
+            if "custom_fields" in project:
+                for custom_field in project["custom_fields"]:
+                    string += self.templates.project_custom_field.format_map(custom_field)
+            string += self._get_project_memberships(user, project["id"])
+
+    def show_issue(self, user, resp_data=None):
+        if not resp_data:
             resp_data = bot.scu.show_issue(user.variables[Parameters],
                                     user.variables[Settings][Key])
-            if resp_data["success"]:
-                issue = resp_data["data"]["issue"]
-                string = self.templates.issue.format_map(issue)
-                if "assigned_to" in issue:
-                    string += self.templates.issue_assigned_to.format_map(issue)
-                if "custom_fields" in issue:
-                    for custom_field in issue["custom_fields"]:
-                        string += self.templates.project_custom_field.format_map(custom_field)
+        if resp_data[Success]:
+            issue = resp_data["data"]["issue"]
+            string = self.templates.issue.format_map(issue)
+            if "assigned_to" in issue:
+                string += self.templates.issue_assigned_to.format_map(issue)
+            if "custom_fields" in issue:
+                for custom_field in issue["custom_fields"]:
+                    string += self.templates.project_custom_field.format_map(custom_field)
+
+    def show(self, user, resp_data=None):
+        bot = self.bot
+        if user.variables[Settings][Context] is Project:
+            self.show_project(user, resp_data)
+        elif user.variables[Settings][Context] is Issue:
+            self.show_issue(user, resp_data)
         else:
             logging.error("Context is not set correctly. Please check your scenery.")
             return
-        if not resp_data["success"]:
+        if not resp_data[Success]:
             self._report_failure(user)
         else:
             bot.reply_function(Message(user.uid, string))
 
+    def get_data(self, user):
+        if user.variables[Storage][Context] == Project:
+            resp_data = bot.scu.show_project(user.variables[Parameters],
+                                                user.variables[Settings][Key])
+        elif user.variables[Storage][Context] == Issue:
+            resp_data = bot.scu.show_issue(user.variables[Parameters],
+                                                user.variables[Settings][Key])
+        else:
+            logging.error("Context is not set correctly. Please check your scenery.")
+            return
+        if resp_data[Success]:
+            user.variables[Storage]["data"] = resp_data["data"]
+            user.variables[Storage][Success] = resp_data[Success]
+        else:
+            self._report_failure(user)
+            user.variables[Storage][Success] = False
+
     def update(self, user):
-        pass
-        # ~ bot = self.bot
-        # ~ if user.variables[Settings][Context] is Project:
-            # ~ resp_data = bot.scu.update_project(user.variables[Parameters],
-                                    # ~ user.variables[Data],
-                                    # ~ user.variables[Settings][Key])
-        # ~ elif user.variables[Settings][Context] is Issue:
-            # ~ resp_data = bot.scu.update_issue(user.variables[Parameters],
-                                    # ~ user.variables[Data],
-                                    # ~ user.variables[Settings][Key])
+        bot = self.bot
+        self._clear_nulls(user.variables[Data])
+        if user.variables[Settings][Context] is Project:
+            bot.scu.update_project(user.variables[Parameters],
+                                    user.variables[Data],
+                                    user.variables[Settings][Key])
+        elif user.variables[Settings][Context] is Issue:
+            bot.scu.update_issue(user.variables[Parameters],
+                                    user.variables[Data],
+                                    user.variables[Settings][Key])
+
     def delete(self, user):
-        pass
-        # ~ bot = self.bot
-        # ~ if user.variables[Settings][Context] is Project:
-            # ~ bot.scu.delete_project(user.variables[Data]["id"],
-                                    # ~ user.variables[Settings][Key])
-        # ~ elif user.variables[Settings][Context] is Issue:
-            # ~ bot.scu.delete_issue(user.variables[Data]["id"],
-                                    # ~ user.variables[Settings][Key])
+        bot = self.bot
+        if user.variables[Settings][Context] is Project:
+            bot.scu.delete_project(user.variables[Data]["id"],
+                                    user.variables[Settings][Key])
+        elif user.variables[Settings][Context] is Issue:
+            bot.scu.delete_issue(user.variables[Data]["id"],
+                                    user.variables[Settings][Key])
 
     def get_project_list(self, user): # Todo: make userdefinable (sort of)
         bot = self.bot
         parameters = user.variables[Parameters]
         key = user.variables[Settings][Key]
         resp_data = bot.scu.get_project_list(parameters, key)
-        if resp_data["success"]:
+        if resp_data[Success]:
             msg_string = str()
             for project in resp_data["data"]["projects"]:
                 msg_string += self.templates.project_list_entry.format_map(project)
+
             if not msg_string:
                 bot.reply_function(Message(user.uid, "Проектов нет."))
             else:
@@ -164,12 +228,13 @@ class DefaultApiRealisation:
         else:
             self._report_failure(user)
 
+
     def get_issue_list(self, user): # Todo: make userdefinable (sort of)
         bot = self.bot
         parameters = user.variables[Parameters]
         key = user.variables[Settings][Key]
         resp_data = bot.scu.get_issue_list(parameters, key)
-        if resp_data["success"]:
+        if resp_data[Success]:
             msg_string = str()
             for issue in resp_data["data"]["issues"]:
                 msg_string += self.templates.issue_list_entry.format_map(issue)
@@ -180,12 +245,6 @@ class DefaultApiRealisation:
         else:
             self._report_failure(user)
 
-    def show_issue_statuses(self, user):
-        bot = self.bot
-
-    def show_issue_priorities(self, user):
-        bot = self.bot
-        pass
     def add_watcher(self, user):
         bot = self.bot
         pass
@@ -216,36 +275,49 @@ class DefaultApiRealisation:
         string = str()
         resp_data = bot.scu.get_project_memberships(project_id,
                                                     user.variables[Settings][Key])
-        if resp_data["success"]:
+        if resp_data[Success]:
             member = dict()
             for mship in resp_data["data"]["memberships"]:
                 member["role_names"] = str({ role["name"] for role in mship["roles"] })[1:-1].replace("'","")
                 member["user"] = mship["user"]
                 string += self.templates.project_member_field.format_map(member)
         return string
-    def get_project_memberships(self, user):
-        bot = self.bot
+    def show_project_memberships(self, user):
         string = self._get_project_memberships(user, user.variables[Data]["identifier"])
         if not string:
             return
         self.bot.reply_function(Message(user.uid, string))
 
-    def push_state_stack(self, user):
-        storage = user.variables[Storage]
-        if State_stack not in storage:
-            storage[State_stack] = list()
-        if JMP_state in storage:
-            storage[State_stack].append(user.state.name)
-            user.state = self.bot.scenery_states[storage[JMP_state]]
-
-    def pop_state_stack(self, user):
-        storage = user.variables[Storage]
-        if State_stack not in storage:
-            logging.warning("No stack initialized. (User:{user.uid})")
+    def _show_enumeration(self, user, enum_list, template, template_list_entry):
+        if user.variables[Settings][Context] in [Project, Global, Issue]:
+            self.bot.reply_function(Message(
+                user.uid,
+                template.format(get_string_from_enum_list(enum_list, template_list_entry))
+                ))
+        else:
+            logging.error("Context is not set correctly. Please check your scenery.")
             return
-        if not storage[State_stack]:
-            logging.warning(f"Stack is empty. (User:{user.uid})")
-            return
-        state_name = storage[State_stack].pop()
-        user.state = self.bot.scenery_states[state_name]
+        
+    def show_issue_statuses(self, user):
+        self._show_enumeration(
+            user = user,
+            enum_list = self.bot.issue_statuses,
+            template = self.templates.issue_statuses,
+            template_list_entry = self.templates.issue_statuses_list_entry,
+        )
 
+    def show_issue_trackers(self, user):
+        self._show_enumeration(
+            user = user,
+            enum_list = self.bot.issue_trackers,
+            template = self.templates.issue_trackers,
+            template_list_entry = self.templates.issue_trackers_list_entry,
+        )
+
+    def show_issue_priorities(self, user):
+        self._show_enumeration(
+            user = user,
+            enum_list = self.bot.issue_priorities,
+            template = self.templates.issue_priorities,
+            template_list_entry = self.templates.issue_priorities_list_entry,
+        )

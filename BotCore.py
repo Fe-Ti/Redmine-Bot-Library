@@ -17,8 +17,8 @@
 #           - which are watched by user
 
 # Goals for early Alpha:
-# +- Run test scenery without api calls
-# - Run test scenery with functions
+# + Run test scenery without api calls
+# + Run test scenery with functions
 # - Write 'prod' scenery
 # - Run 'prod' scenery
 
@@ -45,18 +45,13 @@ class PropertyStruct:
     check_input     : bool = False
 
 class SceneryNode:
-    def __init__(self, name, params_dict, defaults):
+    def __init__(self, name, params_dict):
         self.name = name
         self.type = params_dict[Type]
-        self.phrase = defaults[Phrase]
-        if Phrase in params_dict:
-            self.phrase = params_dict[Phrase]
-        self.error = defaults[Error]
-        if Error in params_dict:
-            self.error = params_dict[Error]
-        self.info = defaults[Info]
-        if Info in params_dict:
-            self.info = params_dict[Info]
+        self.phrase = params_dict[Phrase]
+        self.error = params_dict[Error]
+        self.info = params_dict[Info]
+        
         self.vars_to_set = None
         if Set in params_dict:
             self.vars_to_set = params_dict[Set]
@@ -166,17 +161,20 @@ class SceneryNode_Get(SceneryNode_Say):
 class SceneryGraph:
     def __init__(self, nodes : dict, phrases, errors, infos, root_node_name):
         self.nodes = dict()
-        defaults = {
-            Phrase : nodes[root_node_name][Phrase],
-            Error  : nodes[root_node_name][Error],
-            Info   : nodes[root_node_name][Info]
-        }
+        defaults = dict()
+
         if Default in phrases:
             defaults[Phrase] = phrases[Default]
+        else:
+            raise ValueError("No default phrase in scenery.")
         if Default in errors:
             defaults[Error] = errors[Default]
+        else:
+            raise ValueError("No default error in scenery.")
         if Default in infos:
             defaults[Info] = infos[Default]
+        else:
+            raise ValueError("No default info in scenery.")
 
         for node_name, node_params in nodes.items():
             if node_name not in self.nodes:
@@ -193,6 +191,13 @@ class SceneryGraph:
                 node.add_next(self[next_node], lexemes)
 
     def _create_node(self, node_name, params, phrases, errors, infos, defaults):
+        if Phrase not in params:
+            params[Phrase] = defaults[Phrase]
+        if Error not in params:
+            params[Error] = defaults[Error]
+        if Info not in params:
+            params[Info] = defaults[Info]
+
         if params[Phrase] in phrases:
             params[Phrase] = phrases[params[Phrase]]
         if params[Error] in errors:
@@ -201,11 +206,11 @@ class SceneryGraph:
             params[Info] = infos[params[Info]]
         ntype = params[Type]
         if ntype == Ask:
-            self[node_name] = SceneryNode_Ask(node_name, params, defaults)
+            self[node_name] = SceneryNode_Ask(node_name, params)
         elif ntype == Get:
-            self[node_name] = SceneryNode_Get(node_name, params, defaults)
+            self[node_name] = SceneryNode_Get(node_name, params)
         elif ntype == Say:
-            self[node_name] = SceneryNode_Say(node_name, params, defaults)
+            self[node_name] = SceneryNode_Say(node_name, params)
         else:
             raise TypeError(f"Can't use type {ntype} for node.")
 
@@ -259,6 +264,7 @@ class BotCore:
 
         # Loading stuff from server or local database
         self.issue_statuses = self.scu.get_issue_statuses(self.bot_user_key)
+        self.issue_trackers = self.scu.get_issue_trackers(self.bot_user_key)
         self.issue_priorities = self.scu.get_issue_priorities(self.bot_user_key)
         logging.warning("Loaded issue enums.")
         self.user_db : dict[str, User] = dict()
@@ -281,8 +287,6 @@ class BotCore:
             self.user_db_lock.release()
 
     def _process_user_message(self, message : Message):
-        ## TODO: programmatically define via scenery
-
         # Initial checks and other stuff
         content_array = shlex.split(message.content)
         logging.warning(str(content_array))
@@ -308,7 +312,6 @@ class BotCore:
             self.reply_function(self._get_prompt_message(user))
             return
         # Check and lock the user (locking may not work properly)
-
         if user.is_busy:
             logging.warning(f"User {user.uid} is busy")
             return # Just forget about spammers :)
@@ -317,34 +320,29 @@ class BotCore:
             # Here parsing magic happens
             for lex in content_array:
                 print(user.state, lex)
-                if user.state.is_valid_next(lex):
+                if user.state.is_valid_next(lex, user):
                     self._run_state(user, lex)
                     user.state = user.state.get_next(lex)
                     reply = self._get_prompt_message(user)
                     logging.warning(f"Changed state to {user.state}")
                     if user.state.say_anyway() and not user.state.preserve_lexeme():
-                        # ~ print("Say anyway",reply.content)###
                         self.reply_function(reply)
                     while user.state.preserve_lexeme(): # Jumpung through states which preserve lexeme
-                        if user.state.is_valid_next(lex):
+                        if user.state.is_valid_next(lex, user):
                             self._run_state(user, lex)
                             if user.state.say_anyway():
-                                # ~ print("Say anyway (PL)",reply.content)
                                 self.reply_function(reply)
                             user.state = user.state.get_next(lex)
                             reply = self._get_prompt_message(user)
                             logging.warning(f"Changed state to {user.state}")
                         else:
-                            # ~ reply = Message(user.uid, user.state.get_error(lex))
                             break
                 else:
                     reply = Message(user.uid, user.state.get_error(lex))
                     break
-
             logging.warning(f"Reply ready for {user.uid}")
             # Reply and unlock user for further conversation
             if not user.state.say_anyway(): # Just for eliminating doubles (for Say_enyway states)
-                print("Final",reply.content)
                 self.reply_function(reply)
             logging.warning(f"Replied {user.uid}")
             self._set_user_lock(user=user, is_locked=False)
@@ -352,7 +350,7 @@ class BotCore:
         except Exception as error:
             logging.error(error)
             self._set_user_lock(user=user, is_locked=False)
-            raise error
+            # ~ raise error
 
     def _get_prompt_message(self, user):
         if user.state.type == Ask and user.variables[Settings][Show_hints]:
@@ -365,14 +363,17 @@ class BotCore:
                         user.state.get_phrase(user)
                         )
 
-    def _run_state(self, user, lex):
-        # TODO: Think abot limiting the cycle
+    def _run_state(self, user, lex=None):
         logging.warning(f"Current state is {user.state}")
         user.state.set_vars(user.variables)
-        user.state.input_var(user.variables, lex)
+        if lex:
+            user.state.input_var(user.variables, lex)
         self._call_functions(user)
         
     def _call_functions(self, user):
+        if self.allowed_api_functions == None:
+            logging.warning("None functions are allowed.")
+            return
         state = user.state
         # ~ self.log_to_user(user, f"Start calling functions in state {state}")
         logging.info(f"Start calling functions in state {state}")
@@ -380,16 +381,18 @@ class BotCore:
             # ~ self.log_to_user(user, f"Function is {function}")
             logging.info(f"Function is {function}")
             if type(function) is list:
-                if (function[0] in self.allowed_api_functions) and (eval(function[1])):
+                is_allowed = (function[0] in self.allowed_api_functions) or (self.allowed_api_functions == list())
+                if is_allowed and (eval(function[1])):
                     # Note: the code above is sort of insecure, but scenery
                     # is owned by bot owner so if he want's to steal keys
                     # he can just edit the code and get the dictionary
                     getattr(self.api_realisation, function[0])(user)
             elif type(function) is str:
-                if function in self.allowed_api_functions:
+                is_allowed = (function in self.allowed_api_functions) or (self.allowed_api_functions == list())
+                if is_allowed:
                     getattr(self.api_realisation, function)(user)
 
-    def reset_user(self, user, keep_settings=True):
+    def reset_user(self, user, keep_settings=True, reset_state=True):
         u_settings = {
                         Reset_if_error      : False,
                         Approve_changes     : False,
@@ -405,8 +408,8 @@ class BotCore:
                             Storage: {Context : Global} ## A storage for API realisation variables
                                                         ## Just for not to interfere with Data and Parameters
                             }
-        user.state = self.scenery_states[self.scenery_start_state]
-        # ~ user.context_obj_id = None
+        if reset_state:
+            user.state = self.scenery_states[self.scenery_start_state]
 
     def process_user_message(self, message : Message):
         if self.is_running:
