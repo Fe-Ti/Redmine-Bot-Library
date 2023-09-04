@@ -36,7 +36,7 @@ scenery_v2 = {
                         # ~ "delete"    : ["удали"],
                         # ~ "select"    : ["выбери", "в"],
                         "settings"  : ["запомни", "настрой"]
-                    }
+                    },
         },
         "create" : {
             Type    : Ask,
@@ -153,8 +153,6 @@ scenery_v2 = {
         },
         "draft_show_issue" : {
             Type    : Say,
-            Error   : None,
-            Info    : None,
             Phrase  : """Черновик задачи""",
             Next    : "create_issue_menu",
             Functions: ["show_issue_draft"],
@@ -231,155 +229,154 @@ scenery_v2 = {
             Properties : [Lexeme_preserving]
         },
         
-        # ~ "update" : {
-            # ~ Type    : Ask,
-            # ~ Info    : "Здесь должна быть справка",
-            # ~ Phrase  : """Какой тип объекта ты хочешь создать?""",
-            # ~ Next    : {
-                            # ~ "update_project_init_vars":["проект"],
-                            # ~ "update_issue_init_vars":["задачу"],
-                        # ~ },
-        # ~ },
-        # ~ "update_project_init_vars" : {
-            # ~ Type    : Get,
-            # ~ Error   : "data_get_error",
-            # ~ Phrase  : """Какой проект? Введи идентификатор или номер.""",
-            # ~ Next    : "update_project_menu",
-            # ~ Set     :   {
-                            # ~ Settings : { Context : Project },
-                        # ~ },
-            # ~ Get     :   {Parameters: "id"},
-            # ~ Functions   : ["get_data", ["reset_to_start","""user.variables[Storage][Success]"""]],
-            # ~ Properties  : [Lexeme_preserving]
-        # ~ },
-        # ~ "update_project_menu" : {
-            # ~ Type    : Ask,
-            # ~ Info    : "Здесь должна быть справка",
-            # ~ Phrase  : """Что ты хочешь задать в проекте?""",
-            # ~ Next    : {
-                            # ~ "update_project_set_name":["название","имя"],
-                            # ~ "update_project_set_identifier":["идентификатор", "id"],
-                            # ~ "update_project_set_description":["описание"],
-                            # ~ "update_call":["готово", ".", "!"]
-                        # ~ },
-        # ~ },
-        # ~ "draft_show_project" : {
-            # ~ Type    : Say,
-            # ~ Next    : "update_project_menu",
-            # ~ Functions: ["show_project_draft"],
-            # ~ Properties : [Lexeme_preserving]
-        # ~ },
-        # ~ "update_project_set_identifier" : {
-            # ~ Type    : Get,
-            # ~ Info    : "start",
-            # ~ Phrase  : """Введи идентификатор проекта.""",
-            # ~ Next    : "draft_show_project",
-            # ~ Input   : {Data:'identifier'},
-        # ~ },
-        # ~ "update_project_set_name" : {
-            # ~ Type    : Get,
-            # ~ Info    : "start",
-            # ~ Phrase  : """Введи название проекта.""",
-            # ~ Next    : "draft_show_project",
-            # ~ Input   : {Data:'name'},
-        # ~ },
-        # ~ "update_project_set_description" : {
-            # ~ Type    : Get,
-            # ~ Info    : "start",
-            # ~ Phrase  : """Введи описание проекта.""",
-            # ~ Next    : "draft_show_project",
-            # ~ Input   : {Data:'description'},
-        # ~ },
-        # ~ "update_issue_init_vars" : {
-            # ~ Type    : Get,
-            # ~ Info    : "no_help",
-            # ~ Phrase  : """Инициализирую переменные... """,
-            # ~ Next    : "update_issue_menu",
-            # ~ Set     :   {
-                            # ~ Settings : { Context : Issue }
-                        # ~ },
-            # ~ Get     :   {Parameters: "id"},
-            # ~ Functions   : ["get_data", ["reset_to_start","""user.variables[Storage][Success]"""]],
-            # ~ Properties : [Lexeme_preserving]
-        # ~ },
-        # ~ "update_issue_menu" : {
-            # ~ Type    : Ask,
-            # ~ Info    : "Здесь должна быть справка",
-            # ~ Phrase  : """Что ты хочешь поменять в задаче?""",
-            # ~ Next    : {
-                            # ~ "update_issue_set_project_id" : ["проект"],
-                            # ~ "update_issue_set_subject":["тему","тема"],
-                            # ~ "update_issue_set_description":["описание"],
-                            # ~ "update_issue_set_date":["дату","дата", "срок"],
-                            # ~ "update_issue_set_assign":["исполнителя","исполнитель"],
+        "update" : {
+            Type    : Ask,
+            Info    : "Здесь должна быть справка",
+            Phrase  : """Какой тип объекта ты хочешь создать?""",
+            Next    : {
+                            "update_project_init_vars":["проект"],
+                            "update_issue_init_vars":["задачу"],
+                        },
+        },
+        "update_project_init_vars" : {
+            Type    : Get,
+            Error   : "data_get_error",
+            Phrase  : """Какой проект? Введи идентификатор или номер.""",
+            Next    : "update_project_menu",
+            Set     :   {
+                            Settings : { Context : Project },
+                        },
+            Input   : {Parameters: "id"},
+            Functions   : ["get_data", ["reset_to_start","""user.variables[Storage][Success]"""]],
+            Properties  : [Lexeme_preserving]
+        },
+        "update_project_menu" : {
+            Type    : Ask,
+            Info    : "Здесь должна быть справка",
+            Phrase  : """Что ты хочешь задать в проекте?""",
+            Next    : {
+                            "update_project_set_name":["название","имя"],
+                            "update_project_set_identifier":["идентификатор", "id"],
+                            "update_project_set_description":["описание"],
+                            "update_call":["готово", ".", "!"]
+                        },
+        },
+        "draft_show_project" : {
+            Type    : Say,
+            Next    : "update_project_menu",
+            Functions: ["show_project_draft"],
+            Properties : [Lexeme_preserving]
+        },
+        "update_project_set_identifier" : {
+            Type    : Get,
+            Info    : "start",
+            Phrase  : """Введи идентификатор проекта.""",
+            Next    : "draft_show_project",
+            Input   : {Data:'identifier'},
+        },
+        "update_project_set_name" : {
+            Type    : Get,
+            Info    : "start",
+            Phrase  : """Введи название проекта.""",
+            Next    : "draft_show_project",
+            Input   : {Data:'name'},
+        },
+        "update_project_set_description" : {
+            Type    : Get,
+            Info    : "start",
+            Phrase  : """Введи описание проекта.""",
+            Next    : "draft_show_project",
+            Input   : {Data:'description'},
+        },
+        "update_issue_init_vars" : {
+            Type    : Get,
+            Info    : "no_help",
+            Phrase  : """Инициализирую переменные... """,
+            Next    : "update_issue_menu",
+            Set     :   {
+                            Settings : { Context : Issue }
+                        },
+            Input   : {Parameters: "id"},
+            Functions   : ["get_data", ["reset_to_start","""user.variables[Storage][Success]"""]],
+            Properties : [Lexeme_preserving]
+        },
+        "update_issue_menu" : {
+            Type    : Ask,
+            Info    : "Здесь должна быть справка",
+            Phrase  : """Что ты хочешь поменять в задаче?""",
+            Next    : {
+                            "update_issue_set_project_id" : ["проект"],
+                            "update_issue_set_subject":["тему","тема"],
+                            "update_issue_set_description":["описание"],
+                            "update_issue_set_date":["дату","дата", "срок"],
+                            "update_issue_set_assign":["исполнителя","исполнитель"],
                             # ~ "update_issue_set_tracker":["трекер"],
-                            # ~ "update_call":["готово", "."]
-                        # ~ },
-        # ~ },
-        # ~ "update_issue_set_date":{
-            # ~ Type    : Ask,
-            # ~ Info    : "Здесь должна быть справка",
-            # ~ Phrase  : """В чём?""",
-            # ~ Next    :   {
-                            # ~ "update_issue_set_date_start": ["начала"],
-                            # ~ "update_issue_set_date_due" : ["завершения"]
-                        # ~ },
-        # ~ },
-        # ~ "update_issue_set_project_id" : {
-            # ~ Type    : Get,
-            # ~ Info    : "start",
-            # ~ Phrase  : """Введи идентификатор проекта.""",
-            # ~ Next    : "draft_show_issue",
-            # ~ Input   : {Data:'project_id'},
-        # ~ },
-        # ~ "update_issue_set_subject" : {
-            # ~ Type    : Get,
-            # ~ Info    : "start",
-            # ~ Phrase  : """Введи тему.""",
-            # ~ Next    : "draft_show_issue",
-            # ~ Input   : {Data:'subject'},
-        # ~ },
-        # ~ "update_issue_set_description" : {
-            # ~ Type    : Get,
-            # ~ Info    : "start",
-            # ~ Phrase  : """Введи описание.""",
-            # ~ Next    : "draft_show_issue",
-            # ~ Input   : {Data:'description'},
-        # ~ },
-        # ~ "update_issue_set_date_start" : {
-            # ~ Type    : Get,
-            # ~ Info    : "start",
-            # ~ Phrase  : """Введи дату начала. Например, 2023-08-02""",
-            # ~ Next    : "draft_show_issue",
-            # ~ Input   : {Data:'start_date'},
-        # ~ },
-        # ~ "update_issue_set_date_due" : {
-            # ~ Type    : Get,
-            # ~ Info    : "start",
-            # ~ Phrase  : """Введи срок завершения. Например, 2023-08-02""",
-            # ~ Next    : "draft_show_issue",
-            # ~ Input   : {Data:'due_date'},
-        # ~ },
-        # ~ "update_issue_set_assign" : {
-            # ~ Type    : Get,
-            # ~ Info    : "start",
-            # ~ Phrase  : """Введи id пользователя, которому хочешь назначить задачу.""",
-            # ~ Next    : "draft_show_issue",
-            # ~ Functions:["get_project_memberships"],
-            # ~ Input   : {Data:'assigned_to'},
-        # ~ },
-        # ~ "update_call" : {
-            # ~ Type     : Say,
-            # ~ Error    : "Мне не удалось отправить данные.",
-            # ~ Info     : "start",
-            # ~ Phrase   : """""",
-            # ~ Next     : "reset_user",
-            # ~ Functions: ["update"],
-            # ~ Properties : [Lexeme_preserving]
-        # ~ },
+                            "update_call":["готово", "."]
+                        },
+        },
+        "update_issue_set_date":{
+            Type    : Ask,
+            Info    : "Здесь должна быть справка",
+            Phrase  : """В чём?""",
+            Next    :   {
+                            "update_issue_set_date_start": ["начала"],
+                            "update_issue_set_date_due" : ["завершения"]
+                        },
+        },
+        "update_issue_set_project_id" : {
+            Type    : Get,
+            Info    : "start",
+            Phrase  : """Введи идентификатор проекта.""",
+            Next    : "draft_show_issue",
+            Input   : {Data:'project_id'},
+        },
+        "update_issue_set_subject" : {
+            Type    : Get,
+            Info    : "start",
+            Phrase  : """Введи тему.""",
+            Next    : "draft_show_issue",
+            Input   : {Data:'subject'},
+        },
+        "update_issue_set_description" : {
+            Type    : Get,
+            Info    : "start",
+            Phrase  : """Введи описание.""",
+            Next    : "draft_show_issue",
+            Input   : {Data:'description'},
+        },
+        "update_issue_set_date_start" : {
+            Type    : Get,
+            Info    : "start",
+            Phrase  : """Введи дату начала. Например, 2023-08-02""",
+            Next    : "draft_show_issue",
+            Input   : {Data:'start_date'},
+        },
+        "update_issue_set_date_due" : {
+            Type    : Get,
+            Info    : "start",
+            Phrase  : """Введи срок завершения. Например, 2023-08-02""",
+            Next    : "draft_show_issue",
+            Input   : {Data:'due_date'},
+        },
+        "update_issue_set_assign" : {
+            Type    : Get,
+            Info    : "start",
+            Phrase  : """Введи id пользователя, которому хочешь назначить задачу.""",
+            Next    : "draft_show_issue",
+            Functions:["get_project_memberships"],
+            Input   : {Data:'assigned_to'},
+        },
+        "update_call" : {
+            Type     : Say,
+            Error    : "Мне не удалось отправить данные.",
+            Info     : "start",
+            Phrase   : """""",
+            Next     : "reset_user",
+            Functions: ["update"],
+            Properties : [Lexeme_preserving]
+        },
         "show" : {
             Type    : Ask,
-            Info    : "no_help",
             Phrase  : """Что ты хочешь посмотреть?""",
             Next    : {
                         "show_list":["список"],
@@ -392,7 +389,6 @@ scenery_v2 = {
         },
         "show_set_me_param" : {
             Type    : Ask,
-            Info    : "start",
             Phrase  : """Список чего ты хочешь увидеть?""",
             Next    : {
                         "show_list_of_projects":["проекты"],
@@ -516,9 +512,9 @@ P.S.
 config = {
     "refresh_period"        : 1000, # in seconds
     "sleep_timeout"         : 10,
-    # ~ "use_https"             : False,
-    # ~ "redmine_root_url"      : "localhost/redmine",
-    # ~ "bot_user_key"          : "8e7a355d7f58e4b209b91d9d1f76f2a85ec4b0b6",
+    "use_https"             : False,
+    "redmine_root_url"      : "localhost/redmine",
+    "bot_user_key"          : "8e7a355d7f58e4b209b91d9d1f76f2a85ec4b0b6",
     "user_db_path"          : "./localbase.json",
     "allowed_api_functions" : []# All Functions are allowed if empty list specified
                                 # Specify None to disable function calling

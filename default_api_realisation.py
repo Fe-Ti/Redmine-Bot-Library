@@ -60,10 +60,10 @@ ID проекта: {project_id}
     issue_list_entry = """№{id} "{subject}"\n"""
     
     issue_statuses = """Статусы: {}"""
-    issue_statuses_list_entry = """"\n{name}"({id})"""
+    issue_statuses_list_entry = """\n{id} "{name}" """
     issue_trackers = """Трекеры: {}"""
     issue_trackers_list_entry = issue_statuses_list_entry
-    issue_priorities = """"""
+    issue_priorities = """Приоритеты: {}"""
     issue_priorities_list_entry = issue_statuses_list_entry
 
 class DefaultApiRealisation:

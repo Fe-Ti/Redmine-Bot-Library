@@ -160,6 +160,7 @@ class SceneryNode_Get(SceneryNode_Say):
 
 class SceneryGraph:
     def __init__(self, nodes : dict, phrases, errors, infos, root_node_name):
+        self.node_count : int = 0
         self.nodes = dict()
         defaults = dict()
 
@@ -191,6 +192,7 @@ class SceneryGraph:
                 node.add_next(self[next_node], lexemes)
 
     def _create_node(self, node_name, params, phrases, errors, infos, defaults):
+        self.node_count += 1
         if Phrase not in params:
             params[Phrase] = defaults[Phrase]
         if Error not in params:
@@ -243,7 +245,7 @@ class BotCore:
                                             self.scenery_infos,
                                             self.scenery_start_state)
         self.hint_template = bot_scenery["hint_template"]
-        logging.warning("Scenery init finished.")
+        logging.warning(f"Scenery init finished. {self.scenery_states.node_count} nodes have been loaded.")
         
         # From config:
         self.scu = ServerControlUnit(   server_root=bot_config["redmine_root_url"],
@@ -388,6 +390,7 @@ class BotCore:
                     # he can just edit the code and get the dictionary
                     getattr(self.api_realisation, function[0])(user)
             elif type(function) is str:
+                print(function)
                 is_allowed = (function in self.allowed_api_functions) or (self.allowed_api_functions == list())
                 if is_allowed:
                     getattr(self.api_realisation, function)(user)

@@ -263,4 +263,4 @@ class ServerControlUnit:
         return self.get_enum_list(ISSUE_PRIORITIES, "issue_priorities", user_key)
                                 
     def get_issue_trackers(self, user_key : str = None) -> dict:
-        return self.get_enum_list(ISSUE_TRACKERS, "issue_trackers", user_key)
+        return self.get_enum_list(ISSUE_TRACKERS, "trackers", user_key)
