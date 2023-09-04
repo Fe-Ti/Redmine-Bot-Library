@@ -293,7 +293,7 @@ class BotCore:
         content_array = shlex.split(message.content)
         logging.warning(str(content_array))
         if not content_array:
-            logging.warning("Empty content array")
+            logging.warning("Empty content array.")
             return
         user = self.user_db[message.user_id]
         if content_array[0] in self.scenery_commands["reset"]:

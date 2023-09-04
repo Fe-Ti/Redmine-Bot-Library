@@ -123,21 +123,17 @@ class DefaultApiRealisation:
     ### Functions which call ServerControlUnit functions (i.e. use RM API)
 
     def create(self, user):
-        bot = self.bot
         self._clear_nulls(user.variables[Data])
-        if user.variables[Settings][Context] is Project:
-            bot.scu.create_project(user.variables[Parameters],
+        if user.variables[Storage][Context] is Project:
+            self.bot.scu.create_project(user.variables[Parameters],
                                     user.variables[Data],
                                     user.variables[Settings][Key])
-        elif user.variables[Settings][Context] is Issue:
-            bot.scu.create_issue(user.variables[Parameters],
+        elif user.variables[Storage][Context] is Issue:
+            self.bot.scu.create_issue(user.variables[Parameters],
                                     user.variables[Data],
                                     user.variables[Settings][Key])
 
-    def show_project(self, user, resp_data=None):
-        if not resp_data:
-            resp_data = bot.scu.show_project(user.variables[Parameters],
-                                    user.variables[Settings][Key])
+    def _project_to_str(self, user, resp_data):
         if resp_data[Success]:
             project = resp_data["data"]["project"]
             string = self.templates.project.format_map(project)
@@ -145,11 +141,10 @@ class DefaultApiRealisation:
                 for custom_field in project["custom_fields"]:
                     string += self.templates.project_custom_field.format_map(custom_field)
             string += self._get_project_memberships(user, project["id"])
+            return string
+        return str()
 
-    def show_issue(self, user, resp_data=None):
-        if not resp_data:
-            resp_data = bot.scu.show_issue(user.variables[Parameters],
-                                    user.variables[Settings][Key])
+    def _issue_to_str(self, user, resp_data):
         if resp_data[Success]:
             issue = resp_data["data"]["issue"]
             string = self.templates.issue.format_map(issue)
@@ -158,27 +153,32 @@ class DefaultApiRealisation:
             if "custom_fields" in issue:
                 for custom_field in issue["custom_fields"]:
                     string += self.templates.project_custom_field.format_map(custom_field)
+            return string
+        return str()
 
-    def show(self, user, resp_data=None):
-        bot = self.bot
-        if user.variables[Settings][Context] is Project:
-            self.show_project(user, resp_data)
-        elif user.variables[Settings][Context] is Issue:
-            self.show_issue(user, resp_data)
+    def show(self, user):
+        if user.variables[Storage][Context] is Project:
+            resp_data = self.bot.scu.show_project(user.variables[Parameters],
+                                    user.variables[Settings][Key])
+            string = self._project_to_str(user, resp_data)
+        elif user.variables[Storage][Context] is Issue:
+            resp_data = self.bot.scu.show_issue(user.variables[Parameters],
+                                    user.variables[Settings][Key])
+            string = self._issue_to_str(user, resp_data)
         else:
             logging.error("Context is not set correctly. Please check your scenery.")
             return
         if not resp_data[Success]:
             self._report_failure(user)
         else:
-            bot.reply_function(Message(user.uid, string))
+            self.bot.reply_function(Message(user.uid, string))
 
     def get_data(self, user):
         if user.variables[Storage][Context] == Project:
-            resp_data = bot.scu.show_project(user.variables[Parameters],
+            resp_data = self.bot.scu.show_project(user.variables[Parameters],
                                                 user.variables[Settings][Key])
         elif user.variables[Storage][Context] == Issue:
-            resp_data = bot.scu.show_issue(user.variables[Parameters],
+            resp_data = self.bot.scu.show_issue(user.variables[Parameters],
                                                 user.variables[Settings][Key])
         else:
             logging.error("Context is not set correctly. Please check your scenery.")
@@ -191,89 +191,74 @@ class DefaultApiRealisation:
             user.variables[Storage][Success] = False
 
     def update(self, user):
-        bot = self.bot
         self._clear_nulls(user.variables[Data])
-        if user.variables[Settings][Context] is Project:
-            bot.scu.update_project(user.variables[Parameters],
+        if user.variables[Storage][Context] is Project:
+            self.bot.scu.update_project(user.variables[Parameters],
                                     user.variables[Data],
                                     user.variables[Settings][Key])
-        elif user.variables[Settings][Context] is Issue:
-            bot.scu.update_issue(user.variables[Parameters],
+        elif user.variables[Storage][Context] is Issue:
+            self.bot.scu.update_issue(user.variables[Parameters],
                                     user.variables[Data],
                                     user.variables[Settings][Key])
 
     def delete(self, user):
-        bot = self.bot
-        if user.variables[Settings][Context] is Project:
-            bot.scu.delete_project(user.variables[Data]["id"],
+        if user.variables[Storage][Context] is Project:
+            self.bot.scu.delete_project(user.variables[Data]["id"],
                                     user.variables[Settings][Key])
-        elif user.variables[Settings][Context] is Issue:
-            bot.scu.delete_issue(user.variables[Data]["id"],
+        elif user.variables[Storage][Context] is Issue:
+            self.bot.scu.delete_issue(user.variables[Data]["id"],
                                     user.variables[Settings][Key])
 
-    def get_project_list(self, user): # Todo: make userdefinable (sort of)
-        bot = self.bot
+    def get_project_list(self, user):
         parameters = user.variables[Parameters]
         key = user.variables[Settings][Key]
-        resp_data = bot.scu.get_project_list(parameters, key)
+        resp_data = self.bot.scu.get_project_list(parameters, key)
         if resp_data[Success]:
             msg_string = str()
             for project in resp_data["data"]["projects"]:
                 msg_string += self.templates.project_list_entry.format_map(project)
 
             if not msg_string:
-                bot.reply_function(Message(user.uid, "Проектов нет."))
+                self.bot.reply_function(Message(user.uid, "Проектов нет."))
             else:
-                bot.reply_function(Message(user.uid, msg_string))
+                self.bot.reply_function(Message(user.uid, msg_string))
         else:
             self._report_failure(user)
 
 
-    def get_issue_list(self, user): # Todo: make userdefinable (sort of)
-        bot = self.bot
+    def get_issue_list(self, user):
         parameters = user.variables[Parameters]
         key = user.variables[Settings][Key]
-        resp_data = bot.scu.get_issue_list(parameters, key)
+        resp_data = self.bot.scu.get_issue_list(parameters, key)
         if resp_data[Success]:
             msg_string = str()
             for issue in resp_data["data"]["issues"]:
                 msg_string += self.templates.issue_list_entry.format_map(issue)
             if not msg_string:
-                bot.reply_function(Message(user.uid, "Задач нет."))
+                self.bot.reply_function(Message(user.uid, "Задач нет."))
             else:
-                bot.reply_function(Message(user.uid, msg_string))
+                self.bot.reply_function(Message(user.uid, msg_string))
         else:
             self._report_failure(user)
 
-    def add_watcher(self, user):
-        bot = self.bot
-        pass
-    def delete_watcher(self, user):
-        bot = self.bot
-        pass
-
     def show_project_draft(self, user):
-        bot = self.bot
-        bot.reply_function(Message(
+        self.bot.reply_function(Message(
                                     user.uid, 
                                     self.templates.project_draft.format_map(user.variables[Data])
                                     ))
 
     def show_issue_draft(self, user):
-        bot = self.bot
-        bot.reply_function(Message(
+        self.bot.reply_function(Message(
                                     user.uid, 
                                     self.templates.issue_draft.format_map(user.variables[Data])
                                     ))
 
     def log_to_user(self, user, log_msg):
-        bot = self.bot
-        bot.reply_function(Message(user.uid, log_msg))
+        self.bot.reply_function(Message(user.uid, log_msg))
         
     def _get_project_memberships(self, user, project_id):
-        bot = self.bot
         string = str()
-        resp_data = bot.scu.get_project_memberships(project_id,
+        resp_data = self.bot.scu.get_project_memberships(project_id,
                                                     user.variables[Settings][Key])
         if resp_data[Success]:
             member = dict()
@@ -282,6 +267,7 @@ class DefaultApiRealisation:
                 member["user"] = mship["user"]
                 string += self.templates.project_member_field.format_map(member)
         return string
+
     def show_project_memberships(self, user):
         string = self._get_project_memberships(user, user.variables[Data]["identifier"])
         if not string:
@@ -289,7 +275,7 @@ class DefaultApiRealisation:
         self.bot.reply_function(Message(user.uid, string))
 
     def _show_enumeration(self, user, enum_list, template, template_list_entry):
-        if user.variables[Settings][Context] in [Project, Global, Issue]:
+        if user.variables[Storage][Context] in [Project, Global, Issue]:
             self.bot.reply_function(Message(
                 user.uid,
                 template.format(get_string_from_enum_list(enum_list, template_list_entry))
@@ -321,3 +307,8 @@ class DefaultApiRealisation:
             template = self.templates.issue_priorities,
             template_list_entry = self.templates.issue_priorities_list_entry,
         )
+
+    def add_watcher(self, user):
+        pass
+    def delete_watcher(self, user):
+        pass

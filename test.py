@@ -55,7 +55,7 @@ scenery_v2 = {
             Phrase  : """Инициализирую переменные...""",
             Next    : "create_project_set_identifier",
             Set     :   {
-                            Settings : { Context : Project },
+                            Storage  : { Context : Project },
                             Data     : {
                                 "name"          : "",
                                 "identifier"    : "",
@@ -114,7 +114,7 @@ scenery_v2 = {
                         "create_issue_set_subject" : ["тема"]
                         },
             Set     :   {
-                            Settings : { Context : Issue },
+                            Storage  : { Context : Issue },
                             Data     : {
                                 "project_id"    : "",
                                 "subject"       : "",
@@ -244,7 +244,7 @@ scenery_v2 = {
             Phrase  : """Какой проект? Введи идентификатор или номер.""",
             Next    : "update_project_menu",
             Set     :   {
-                            Settings : { Context : Project },
+                            Storage  : { Context : Project },
                         },
             Input   : {Parameters: "id"},
             Functions   : ["get_data", ["reset_to_start","""user.variables[Storage][Success]"""]],
@@ -294,7 +294,7 @@ scenery_v2 = {
             Phrase  : """Инициализирую переменные... """,
             Next    : "update_issue_menu",
             Set     :   {
-                            Settings : { Context : Issue }
+                            Storage  : { Context : Issue }
                         },
             Input   : {Parameters: "id"},
             Functions   : ["get_data", ["reset_to_start","""user.variables[Storage][Success]"""]],
@@ -426,7 +426,7 @@ scenery_v2 = {
             Next    : "show_call",
             Input   : {Parameters:'id'},
             Set     :   {
-                            Settings    : { Context : Project },
+                            Storage     : { Context : Project },
                             Parameters  : {"include": "trackers"},
                         },
         },
@@ -436,7 +436,7 @@ scenery_v2 = {
             Phrase  : """Какую задачу ты хочешь посмотреть?""",
             Next    : "show_call",
             Input   : {Parameters:'id'},
-            Set     : { Settings : { Context : Issue } }
+            Set     : { Storage  : { Context : Issue } }
         },
         "show_call" : {
             Type     : Say,
@@ -679,7 +679,7 @@ while True:
             # ~ Error   : "start",
             # ~ Info    : "select",
             # ~ Phrase  : "Введи идентификатор задачи.",
-            # ~ Set     : {Settings : {Context:Issue}},
+            # ~ Set     : {Storage : {Context:Issue}},
             # ~ Input   : {Data:'id'},
             # ~ Next    : "start"
         # ~ },
@@ -688,7 +688,7 @@ while True:
             # ~ Error   : "start",
             # ~ Info    : "select",
             # ~ Phrase  : "Введи идентификатор проекта.",
-            # ~ Set     : {Settings : {Context:Project}},
+            # ~ Set     : {Storage : {Context:Project}},
             # ~ Input   : {Data:'id'},
             # ~ Next    : "start"
         # ~ },
