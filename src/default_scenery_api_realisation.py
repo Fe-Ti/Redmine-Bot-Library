@@ -42,7 +42,7 @@ class DefaultApiRealisationTemplates:
     pass
 
 class DefaultSceneryApiRealisation:
-    def __init__(self, bot = None, templates = DefaultTemplates()):
+    def __init__(self, bot = None, templates = DefaultApiRealisationTemplates()):
         self.bot = bot
         self.templates = templates
 

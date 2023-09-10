@@ -13,8 +13,7 @@ from dataclasses import dataclass, asdict
 from .server_control_unit import ServerControlUnit
 from .constants import *
 from .data_structs import User, Message
-from .default_scenery_api_realisation import DefaultSceneryApiRealisation,
-                                            DefaultApiRealisationTemplates
+from .default_scenery_api_realisation import DefaultSceneryApiRealisation, DefaultApiRealisationTemplates
 
 @dataclass
 class PropertyStruct:
@@ -238,7 +237,7 @@ class RedmineBot:
         logging.info("Config and SCU init finished.")
 
         self.reply_function = reply_function
-        logging.info(f"Reply function set to {self.reply_function.__name__}.")
+        logging.info(f"Reply function set to {self.reply_function}.")
         self.api_realisation = api_realisation
         logging.info("API realisation is set.")
         self.api_realisation._change_bot(self)
@@ -380,6 +379,8 @@ class RedmineBot:
                 is_allowed = (function in self.allowed_api_functions) or (self.allowed_api_functions == list())
                 if is_allowed:
                     getattr(self.api_realisation, function)(user)
+            if not is_allowed:
+                logging.warning(f"{function} is invalid! Check your scenery.")
 
     def reset_user(self, user, keep_settings=True, reset_state=True):
         u_settings = {
