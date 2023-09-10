@@ -29,7 +29,7 @@ class SceneryNode:
         self.phrase = params_dict[Phrase]
         self.error = params_dict[Error]
         self.info = params_dict[Info]
-        
+
         self.vars_to_set = None
         if Set in params_dict:
             self.vars_to_set = params_dict[Set]
@@ -224,7 +224,7 @@ class RedmineBot:
                                             self.scenery_start_state)
         self.hint_template = bot_scenery[Hint_template]
         logging.info(f"Scenery init finished. {self.scenery_states.node_count} nodes have been loaded.")
-        
+
         # From config:
         self.scu = ServerControlUnit(   server_root=bot_config["redmine_root_url"],
                                         use_https=bot_config["use_https"])
@@ -356,7 +356,7 @@ class RedmineBot:
         if lex:
             user.state.input_var(user.variables, lex)
         self._call_functions(user)
-        
+
     def _call_functions(self, user):
         if self.allowed_api_functions == None:
             logging.warning("None functions are allowed.")
@@ -431,7 +431,7 @@ class RedmineBot:
         updated_at = time.time()
         while self.is_running:
             while (time.time() - updated_at) < self.refresh_period:
-                time.sleep(0.5)
+                time.sleep(1)
                 if not self.is_running:
                     return
             if (time.time() - self.last_msg_timestamp) < self.sleep_timeout:
@@ -440,31 +440,37 @@ class RedmineBot:
                 self._safe_update_enums(new_statuses, new_priorities)
             else:
                 while (time.time() - self.last_msg_timestamp) > self.sleep_timeout:
-                    time.sleep(0.1)
+                    time.sleep(5)
+
+    def notificating_routine(self):
+        for uid,user in self.user_db.items():
+            if user.variables[Settings][Notify]:
+                self.api_realisation._notify(user)
+        self.last_notify_timestamp = time.time()
 
     def notificating_cycle(self):
         if not self.notify_period:
             return
-        last_notify = time.time()
         while self.is_running:
-            if(time.time() - self.last_msg_timestamp) < self.notify_period:
-                for user in self.user_db:
-                    if user.variables[Settings][Notify]:
-                        self.api_realisation._notify(user)
-            else:
-                time.sleep(30)
+            while (time.time() - self.last_notify_timestamp) < self.notify_period:
+                time.sleep(10)
+                if not self.is_running:
+                    return
+            self.notificating_routine()
+            self.last_notify_timestamp = time.time()
 
     def start(self):
         if not self.reply_function:
             raise RuntimeError("Reply function is not set")
         if not self.is_running:
             self.last_msg_timestamp = time.time()
+            self.notificating_routine()
             self.last_notify_timestamp = time.time()
             self.is_running = True
             self.enum_updater = Thread(target=self.update_enumerations_cycle, daemon=False)
             self.enum_updater.start()
-            self.enum_updater = Thread(target=self.update_enumerations_cycle, daemon=False)
-            self.enum_updater.start()
+            self.notifier = Thread(target=self.notificating_cycle, daemon=False)
+            self.notifier.start()
         else:
             raise RuntimeError("Bot is already running.")
 
