@@ -26,3 +26,8 @@
 ```
 python3 test.py [ключ бота в Telegram]
 ```
+
+
+```
+Copyright 2023 Fe-Ti aka T.Kravchenko
+```

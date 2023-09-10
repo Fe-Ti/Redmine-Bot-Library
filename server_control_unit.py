@@ -1,3 +1,4 @@
+# Copyright 2023 Fe-Ti aka T.Kravchenko
 
 import json
 import logging
@@ -5,9 +6,8 @@ from typing import Union, Any
 from pathlib import Path
 
 
-from http_req_lib import GET, POST, PUT, DELETE, make_url
-from http_req_lib import u_request
-from bot_lib_constants import Success
+from .http_req_lib import GET, POST, PUT, DELETE, make_url
+from .constants import Success
 
 ISSUES = Path('issues')
 ISSUE_STATUSES = Path('issue_statuses')
@@ -90,10 +90,6 @@ class ServerControlUnit:
         """
         _check_type(parameters, [dict])
         parameters = self._mix_parameters(parameters, user_key)
-        # ~ logging.warning(make_url(self.http_scheme,
-                                # ~ self.server_root,
-                                # ~ api_resource,
-                                # ~ parameters))
         resp = GET(make_url(self.http_scheme,
                                 self.server_root,
                                 api_resource,

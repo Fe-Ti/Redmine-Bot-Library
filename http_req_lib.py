@@ -1,3 +1,4 @@
+# Copyright 2023 Fe-Ti aka T.Kravchenko
 
 import urllib.request as u_request # TODO: make async http
 

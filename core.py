@@ -1,28 +1,6 @@
 # (Yet another) Redmine Bot Library
+# Copyright 2023 Fe-Ti aka T.Kravchenko
 
-# Goals for the first version:
-# - use Redmine JSON REST API (maybe in future supoort XML)
-# - provide a simple bot logic which will be able to:
-#     - create/delete:
-#         - projects
-#         - issues
-#     - assign issues to user
-#     - add watchers to issues
-#     - get:
-#       - project list
-#       - issues:
-#           - by number
-#           - listed in project (with filtering);
-#           - assigned to user
-#           - which are watched by user
-
-# Goals for early Alpha:
-# + Run test scenery without api calls
-# + Run test scenery with functions
-# - Write 'prod' scenery
-# - Run 'prod' scenery
-
-# Then think about next goals
 import json
 import logging
 import shlex
@@ -32,10 +10,11 @@ from pathlib import Path
 from threading import Thread, Lock, current_thread
 from dataclasses import dataclass, asdict
 
-from bot_server_control_unit import ServerControlUnit
-from bot_lib_constants import *
-from bot_data_structs import User, Message
-from default_api_realisation import DefaultApiRealisation, DefaultTemplates
+from .server_control_unit import ServerControlUnit
+from .constants import *
+from .data_structs import User, Message
+from .default_scenery_api_realisation import DefaultSceneryApiRealisation,
+                                            DefaultApiRealisationTemplates
 
 @dataclass
 class PropertyStruct:
@@ -223,110 +202,117 @@ class SceneryGraph:
         self.nodes[key] = value
 
 
-class BotCore:
+class RedmineBot:
     def __init__(self,
                     bot_scenery : dict,
                     bot_config : dict,
                     reply_function = None,
-                    api_realisation = DefaultApiRealisation() ):
+                    api_realisation = DefaultSceneryApiRealisation() ):
         """
-        bot_user_key    -   is used for fetching enumerations and other
+        "bot_user_key"    -   is used for fetching enumerations and other
                             non-confidential data.
         """
         # From scenery:
-        self.scenery_phrases = bot_scenery["phrases"].copy()
-        self.scenery_errors = bot_scenery["errors"].copy()
-        self.scenery_infos = bot_scenery["infos"].copy()
-        self.scenery_commands = bot_scenery["commands"].copy()
-        self.scenery_start_state = bot_scenery["start_state"]
-        self.scenery_states = SceneryGraph(bot_scenery["states"].copy(),
+        self.scenery_phrases = bot_scenery[Phrases].copy()
+        self.scenery_errors = bot_scenery[Errors].copy()
+        self.scenery_infos = bot_scenery[Infos].copy()
+        self.scenery_commands = bot_scenery[Commands].copy()
+        self.scenery_start_state = bot_scenery[Start_state]
+        self.scenery_states = SceneryGraph(bot_scenery[States].copy(),
                                             self.scenery_phrases,
                                             self.scenery_errors,
                                             self.scenery_infos,
                                             self.scenery_start_state)
-        self.hint_template = bot_scenery["hint_template"]
-        logging.warning(f"Scenery init finished. {self.scenery_states.node_count} nodes have been loaded.")
+        self.hint_template = bot_scenery[Hint_template]
+        logging.info(f"Scenery init finished. {self.scenery_states.node_count} nodes have been loaded.")
         
         # From config:
         self.scu = ServerControlUnit(   server_root=bot_config["redmine_root_url"],
                                         use_https=bot_config["use_https"])
         self.bot_user_key = bot_config["bot_user_key"]
         self.refresh_period = bot_config["refresh_period"]
+        self.notify_period = bot_config["notify_period"]
         self.sleep_timeout = bot_config["sleep_timeout"]
         self.user_db_path = Path(bot_config["user_db_path"])
         self.allowed_api_functions = bot_config["allowed_api_functions"][:]
-        logging.warning("Config and SCU init finished.")
+        logging.info("Config and SCU init finished.")
 
         self.reply_function = reply_function
-        logging.warning("Reply function set to {self.reply_function}.")
+        logging.info(f"Reply function set to {self.reply_function.__name__}.")
         self.api_realisation = api_realisation
-        logging.warning("API realisation is set.")
+        logging.info("API realisation is set.")
         self.api_realisation._change_bot(self)
-        logging.warning("API realisation references current bot.")
+        logging.info("API realisation references current bot.")
 
-        # Loading stuff from server or local database
-        self.issue_statuses = self.scu.get_issue_statuses(self.bot_user_key)
-        self.issue_trackers = self.scu.get_issue_trackers(self.bot_user_key)
-        self.issue_priorities = self.scu.get_issue_priorities(self.bot_user_key)
-        logging.warning("Loaded issue enums.")
+        # Init enumumerations
+        self.issue_statuses = list()    # self.scu.get_issue_statuses(self.bot_user_key)
+        self.issue_trackers = list()    # self.scu.get_issue_trackers(self.bot_user_key)
+        self.issue_priorities = list()  # self.scu.get_issue_priorities(self.bot_user_key)
+
         self.user_db : dict[str, User] = dict()
         self._load_user_db() # TODO: improve security of database
-        logging.warning("Loaded user database.")
+        logging.info("Loaded user database.")
 
         # Initializing multithreading stuff
         self.enum_lock = Lock()
         self.user_db_lock = Lock()
         self.last_msg_timestamp = 0
+        self.last_notify_timestamp = 0
         self.is_running = False
         self.enum_updater = None
-        logging.warning("MT stuff init finished.")
+        self.notifier = None
+        logging.info("MT stuff init finished.")
 
-    def _set_user_lock(self, user, is_locked):
+    def _set_user_lock(self, user, lock_state : bool):
         self.user_db_lock.acquire()
         try:
-            user.is_busy = is_locked
+            if lock_state and user.is_busy:
+                raise ValueError(f"User {user.uid} lock is already acquired by another thread.")
+            user.is_busy = lock_state
+        except ValueError as error:
+            logging.error(Error)
         finally:
             self.user_db_lock.release()
 
     def _process_user_message(self, message : Message):
         # Initial checks and other stuff
         content_array = shlex.split(message.content)
-        logging.warning(str(content_array))
+        logging.info(str(content_array))
         if not content_array:
-            logging.warning("Empty content array.")
+            logging.info("Empty content array.")
             return
         user = self.user_db[message.user_id]
-        if content_array[0] in self.scenery_commands["reset"]:
-            logging.warning(f"Fully resetting user {user.uid}")
+        if content_array[0] in self.scenery_commands[Reset]:
+            logging.info(f"Fully resetting user {user.uid}")
             self.reset_user(user, keep_settings=False)
             self.reply_function(self._get_prompt_message(user))
             return
-        elif content_array[0] in self.scenery_commands["cancel"]:
-            logging.warning(f"Resetting state and variables of user {user.uid}")
+        elif content_array[0] in self.scenery_commands[Cancel]:
+            logging.info(f"Resetting state and variables of user {user.uid}")
             self.reset_user(user, keep_settings=True)
             self.reply_function(self._get_prompt_message(user))
             return
-        elif content_array[0] in self.scenery_commands["info"]:
+        elif content_array[0] in self.scenery_commands[Info]:
             self.reply_function(Message(user.uid, user.state.info))
             self.reply_function(self._get_prompt_message(user))
             return
-        elif content_array[0] in self.scenery_commands["repeat"]:
+        elif content_array[0] in self.scenery_commands[Repeat]:
             self.reply_function(self._get_prompt_message(user))
             return
         # Check and lock the user (locking may not work properly)
         if user.is_busy:
-            logging.warning(f"User {user.uid} is busy")
+            logging.info(f"User {user.uid} is busy")
             return # Just forget about spammers :)
-        self._set_user_lock(user=user, is_locked=True)
+        self._set_user_lock(user=user, lock_state=True)
         try:
             # Here parsing magic happens
             for lex in content_array:
-                print(user.state, lex)
+                # ~ print(user.state, lex)
                 if user.state.is_valid_next(lex, user):
                     self._run_state(user, lex)
                     user.state = user.state.get_next(lex)
                     reply = self._get_prompt_message(user)
-                    logging.warning(f"Changed state to {user.state}")
+                    logging.info(f"Changed state to {user.state}")
                     if user.state.say_anyway() and not user.state.preserve_lexeme():
                         self.reply_function(reply)
                     while user.state.preserve_lexeme(): # Jumpung through states which preserve lexeme
@@ -336,22 +322,22 @@ class BotCore:
                                 self.reply_function(reply)
                             user.state = user.state.get_next(lex)
                             reply = self._get_prompt_message(user)
-                            logging.warning(f"Changed state to {user.state}")
+                            logging.info(f"Changed state to {user.state}")
                         else:
                             break
                 else:
                     reply = Message(user.uid, user.state.get_error(lex))
                     break
-            logging.warning(f"Reply ready for {user.uid}")
+            logging.info(f"Reply ready for {user.uid}")
             # Reply and unlock user for further conversation
             if not user.state.say_anyway(): # Just for eliminating doubles (for Say_enyway states)
                 self.reply_function(reply)
-            logging.warning(f"Replied {user.uid}")
-            self._set_user_lock(user=user, is_locked=False)
-            logging.warning(f"User {user.uid} is free")
+            logging.info(f"Replied {user.uid}")
+            self._set_user_lock(user=user, lock_state=False)
+            logging.info(f"User {user.uid} is free")
         except Exception as error:
             logging.error(error)
-            self._set_user_lock(user=user, is_locked=False)
+            self._set_user_lock(user=user, lock_state=False)
             # ~ raise error
 
     def _get_prompt_message(self, user):
@@ -366,7 +352,7 @@ class BotCore:
                         )
 
     def _run_state(self, user, lex=None):
-        logging.warning(f"Current state is {user.state}")
+        logging.info(f"Current state is {user.state}")
         user.state.set_vars(user.variables)
         if lex:
             user.state.input_var(user.variables, lex)
@@ -390,15 +376,14 @@ class BotCore:
                     # he can just edit the code and get the dictionary
                     getattr(self.api_realisation, function[0])(user)
             elif type(function) is str:
-                print(function)
+                # ~ print(function)
                 is_allowed = (function in self.allowed_api_functions) or (self.allowed_api_functions == list())
                 if is_allowed:
                     getattr(self.api_realisation, function)(user)
 
     def reset_user(self, user, keep_settings=True, reset_state=True):
         u_settings = {
-                        Reset_if_error      : False,
-                        Approve_changes     : False,
+                        Notify              : True,
                         Show_hints          : True,
                         Key                 : None,
                     }
@@ -456,12 +441,27 @@ class BotCore:
                 while (time.time() - self.last_msg_timestamp) > self.sleep_timeout:
                     time.sleep(0.1)
 
+    def notificating_cycle(self):
+        if not self.notify_period:
+            return
+        last_notify = time.time()
+        while self.is_running:
+            if(time.time() - self.last_msg_timestamp) < self.notify_period:
+                for user in self.user_db:
+                    if user.variables[Settings][Notify]:
+                        self.api_realisation._notify(user)
+            else:
+                time.sleep(30)
+
     def start(self):
         if not self.reply_function:
             raise RuntimeError("Reply function is not set")
         if not self.is_running:
             self.last_msg_timestamp = time.time()
+            self.last_notify_timestamp = time.time()
             self.is_running = True
+            self.enum_updater = Thread(target=self.update_enumerations_cycle, daemon=False)
+            self.enum_updater.start()
             self.enum_updater = Thread(target=self.update_enumerations_cycle, daemon=False)
             self.enum_updater.start()
         else:
@@ -504,4 +504,3 @@ class BotCore:
                 self.user_db[uid].state = self.scenery_states[state_name]
         except OSError:
             pass
-

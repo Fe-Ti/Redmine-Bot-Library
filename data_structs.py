@@ -1,3 +1,4 @@
+# Copyright 2023 Fe-Ti aka T.Kravchenko
 from dataclasses import dataclass
 
 @dataclass

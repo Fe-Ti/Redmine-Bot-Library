@@ -1,5 +1,21 @@
+# Copyright 2023 Fe-Ti aka T.Kravchenko
 
-# Keywords of states
+# Scenery sections
+Start_state     = "start_state"
+Hint_template   = "hint_template"
+States          = "states"
+Phrases         = "phrases"
+Errors          = "errors"
+Infos           = "infos"
+Commands        = "commands"
+
+# Commands
+Info    = "info"
+Reset   = "reset"
+Cancel  = "cancel"
+Repeat  = "repeat"
+
+# Keywords in state
 Type        = "Type"
 Error       = "Error"
 Info        = "Info" # help message
@@ -14,9 +30,10 @@ Functions   = "Functions" # A list of functions to run, e.g.:
                         # Note: the expression is currently evaluated by eval()
                         # Note 2: allowed functions are defined in config
 
-Properties  = "Properties"   # Determines how the state is interpreted.
+Properties  = "Properties"  # Determines how the state is interpreted.
                             # Is an array (list) of strings, e.g.:
                             # Properties: [Lexeme_preserving, Phrase_formatting]
+
 # Property list
 Phrase_formatting   = "Phrase_formatting" # If present, then phrase is formatted like f"..."
 Say_anyway          = "Say_anyway" # If present, then bot sends phrase in any case
@@ -32,8 +49,8 @@ Ask = 2 # Ask and choose next
 Settings        = "Settings"
 Key             = "Key"
 Show_hints      = "Show_hints"
-Approve_changes = "Approve_changes"
-Reset_if_error  = "Reset_if_error"
+Notify          = "Notify"
+# ~ Reset_if_error  = "Reset_if_error"
 
 Data        = "Data" # JSON data
 Parameters  = "Parameters" # HTTP params
@@ -50,5 +67,7 @@ Issue   = "Issue"
 Project = "Project"
 
 # Misc Constants
-Default = "Default"
-Success = "Success"
+Default         = "Default"
+Notification    = "Notification"
+
+Success         = "Success"
