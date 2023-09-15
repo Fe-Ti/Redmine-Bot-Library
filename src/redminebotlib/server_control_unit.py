@@ -135,7 +135,7 @@ class ServerControlUnit:
                         parameters : dict,
                         data : dict,
                         user_key : str,
-                        expected_code : int = 202):
+                        expected_code : int = 204):
         """
         """
         _check_type(parameters, [dict])

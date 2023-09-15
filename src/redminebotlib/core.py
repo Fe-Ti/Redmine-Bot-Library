@@ -211,37 +211,16 @@ class RedmineBot:
         "bot_user_key"    -   is used for fetching enumerations and other
                             non-confidential data.
         """
-        # From scenery:
-        self.scenery_phrases = bot_scenery[Phrases].copy()
-        self.scenery_errors = bot_scenery[Errors].copy()
-        self.scenery_infos = bot_scenery[Infos].copy()
-        self.scenery_commands = bot_scenery[Commands].copy()
-        self.scenery_start_state = bot_scenery[Start_state]
-        self.scenery_states = SceneryGraph(bot_scenery[States].copy(),
-                                            self.scenery_phrases,
-                                            self.scenery_errors,
-                                            self.scenery_infos,
-                                            self.scenery_start_state)
-        self.hint_template = bot_scenery[Hint_template]
-        logging.info(f"Scenery init finished. {self.scenery_states.node_count} nodes have been loaded.")
 
         # From config:
         self.scu = ServerControlUnit(   server_root=bot_config["redmine_root_url"],
                                         use_https=bot_config["use_https"])
-        self.bot_user_key = bot_config["bot_user_key"]
-        self.refresh_period = bot_config["refresh_period"]
-        self.notify_period = bot_config["notify_period"]
-        self.sleep_timeout = bot_config["sleep_timeout"]
-        self.user_db_path = Path(bot_config["user_db_path"])
-        self.allowed_api_functions = bot_config["allowed_api_functions"][:]
-        logging.info("Config and SCU init finished.")
-
+        self.reload(config=bot_config,
+                    scenery=bot_scenery,
+                    api_realisation=api_realisation)
+                    
         self.reply_function = reply_function
         logging.info(f"Reply function set to {self.reply_function}.")
-        self.api_realisation = api_realisation
-        logging.info("API realisation is set.")
-        self.api_realisation._change_bot(self)
-        logging.info("API realisation references current bot.")
 
         # Init enumumerations
         self.issue_statuses = list()    # self.scu.get_issue_statuses(self.bot_user_key)
@@ -337,7 +316,7 @@ class RedmineBot:
         except Exception as error:
             logging.error(error)
             self._set_user_lock(user=user, lock_state=False)
-            # ~ raise error
+            raise error
 
     def _get_prompt_message(self, user):
         if user.state.type == Ask and user.variables[Settings][Show_hints]:
@@ -364,6 +343,7 @@ class RedmineBot:
         state = user.state
         # ~ self.log_to_user(user, f"Start calling functions in state {state}")
         logging.info(f"Start calling functions in state {state}")
+        # ~ print(user.variables)
         for function in state.function_list:
             # ~ self.log_to_user(user, f"Function is {function}")
             logging.info(f"Function is {function}")
@@ -464,8 +444,6 @@ class RedmineBot:
             raise RuntimeError("Reply function is not set")
         if not self.is_running:
             self.last_msg_timestamp = time.time()
-            self.notificating_routine()
-            self.last_notify_timestamp = time.time()
             self.is_running = True
             self.enum_updater = Thread(target=self.update_enumerations_cycle, daemon=False)
             self.enum_updater.start()
@@ -484,13 +462,44 @@ class RedmineBot:
 
     def set_reply_function(self, new_reply_func):
         self.reply_function = new_reply_func
+        
+    def reload(self, config, scenery, api_realisation):
+        self.scu.server_root = config["redmine_root_url"]
+        self.scu.use_https = config["use_https"]
+        self.bot_user_key = config["bot_user_key"]
+        self.refresh_period = config["refresh_period"]
+        self.notify_period = config["notify_period"]
+        self.sleep_timeout = config["sleep_timeout"]
+        self.user_db_path = Path(config["user_db_path"])
+        self.allowed_api_functions = config["allowed_api_functions"][:]
+        logging.info("Config and SCU init finished.")
+        # From scenery:
+        self.scenery_phrases = scenery[Phrases].copy()
+        self.scenery_errors = scenery[Errors].copy()
+        self.scenery_infos = scenery[Infos].copy()
+        self.scenery_commands = scenery[Commands].copy()
+        self.scenery_start_state = scenery[Start_state]
+        self.scenery_states = SceneryGraph(scenery[States].copy(),
+                                            self.scenery_phrases,
+                                            self.scenery_errors,
+                                            self.scenery_infos,
+                                            self.scenery_start_state)
+        self.hint_template = scenery[Hint_template]
+        logging.info(f"Scenery init finished. {self.scenery_states.node_count} nodes have been loaded.")
+
+        # From config:
+        self.api_realisation = api_realisation
+        logging.info("API realisation is set.")
+        self.api_realisation._change_bot(self)
+        logging.info("API realisation references current bot.")
 
     def restart(self):
         self.stop()
         self.start()
 
     def shutdown(self):
-        self.stop()
+        if self.is_running:
+            self.stop()
         self._save_user_db()
 
     def _save_user_db(self):

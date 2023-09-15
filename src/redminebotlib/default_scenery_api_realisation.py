@@ -34,9 +34,6 @@ def get_empty_scenery():
                 Repeat    : []
             },
         }
-def save_scenery_to_json(scenery, filename):
-    with open(filename, 'w') as sc_file:
-        sc_file.write(json.dumps(scenery))
 
 class DefaultApiRealisationTemplates:
     pass
