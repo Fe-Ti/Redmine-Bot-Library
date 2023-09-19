@@ -204,13 +204,15 @@ class SceneryGraph:
 class RedmineBot:
     def __init__(self,
                     bot_scenery : dict,
-                    bot_config : dict,
+                    bot_config  : dict,
+                    bot_user_key: str,
                     reply_function = None,
                     api_realisation = DefaultSceneryApiRealisation() ):
         """
         "bot_user_key"    -   is used for fetching enumerations and other
                             non-confidential data.
         """
+        self.bot_user_key = bot_user_key
 
         # From config:
         self.scu = ServerControlUnit(   server_root=bot_config["redmine_root_url"],
@@ -457,6 +459,7 @@ class RedmineBot:
             self.is_running = False
             self.last_msg_timestamp = time.time()
             self.enum_updater.join()
+            self.notifier.join()
         else:
             raise RuntimeError("Bot has already been stopped.")
 
@@ -466,7 +469,6 @@ class RedmineBot:
     def reload(self, config, scenery, api_realisation):
         self.scu.server_root = config["redmine_root_url"]
         self.scu.use_https = config["use_https"]
-        self.bot_user_key = config["bot_user_key"]
         self.refresh_period = config["refresh_period"]
         self.notify_period = config["notify_period"]
         self.sleep_timeout = config["sleep_timeout"]
