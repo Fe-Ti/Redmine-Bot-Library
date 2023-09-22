@@ -401,17 +401,19 @@ class RedmineBot:
         else:
             raise ValueError(f"User with id={user_id} already exists.")
 
-    def _safe_update_enums(self, new_statuses, new_priorities):
+    def _safe_update_enums(self, new_statuses, new_priorities, new_trackers):
         self.enum_lock.acquire()
         try:
             self.issue_statuses = new_statuses
             self.issue_priorities = new_priorities
+            self.issue_trackers = new_trackers
         finally:
             self.enum_lock.release()
 
     def update_enumerations_cycle(self):
-        updated_at = time.time()
+        updated_at = 0
         while self.is_running:
+            # ~ print("Running...")
             while (time.time() - updated_at) < self.refresh_period:
                 time.sleep(1)
                 if not self.is_running:
@@ -419,7 +421,10 @@ class RedmineBot:
             if (time.time() - self.last_msg_timestamp) < self.sleep_timeout:
                 new_statuses = self.scu.get_issue_statuses(self.bot_user_key)
                 new_priorities = self.scu.get_issue_priorities(self.bot_user_key)
-                self._safe_update_enums(new_statuses, new_priorities)
+                new_trackers = self.scu.get_issue_trackers(self.bot_user_key)
+                # ~ print(new_statuses, new_priorities, new_trackers)
+                self._safe_update_enums(new_statuses, new_priorities, new_trackers)
+                updated_at = time.time()
             else:
                 while (time.time() - self.last_msg_timestamp) > self.sleep_timeout:
                     time.sleep(5)

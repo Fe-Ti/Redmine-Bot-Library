@@ -205,7 +205,7 @@ class ServerControlUnit:
     def create_issue(self, parameters : dict, data : dict, user_key : str = None):
         """
         """
-        return self._create_object(ISSUES, parameters, {"issue" : data}, user_key,data)
+        return self._create_object(ISSUES, parameters, {"issue" : data}, user_key)
 
     def update_issue(self, parameters : dict, data : dict, user_key : str = None):
         """
@@ -250,6 +250,7 @@ class ServerControlUnit:
         if resp[Success]:
             return resp["data"][enum_name]
         else:
+            logging.error(f"Failed to get {enum_name} from {enum_path}.")
             return list()
             
     def get_issue_statuses(self, user_key : str = None) -> dict:

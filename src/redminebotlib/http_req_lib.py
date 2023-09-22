@@ -66,7 +66,7 @@ def POST(url : str, data : str, encoding : str ='utf-8'):
     req = u_request.Request(url=url,
                             data=bytes(data, encoding),
                             method="POST",
-                            headers={"Content-Type": f"application/json"})
+                            headers={"Content-Type": "application/json"})
     return _sync_get_response(req, encoding)
 
 def PUT(url : str, data : str, encoding : str ='utf-8'):
@@ -76,5 +76,5 @@ def PUT(url : str, data : str, encoding : str ='utf-8'):
     req = u_request.Request(url=url,
                             data=bytes(data, encoding),
                             method="PUT",
-                            headers={"Content-Type": f"application/json"})
+                            headers={"Content-Type": "application/json"})
     return _sync_get_response(req, encoding)
