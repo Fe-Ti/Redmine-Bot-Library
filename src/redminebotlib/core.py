@@ -436,13 +436,18 @@ class RedmineBot:
         self.last_notify_timestamp = time.time()
 
     def notificating_cycle(self):
-        if not self.notify_period:
+        if not self.notify_schedule:
+            logging.warning("Switched to external notification trigger.")
             return
+        logging.warning("Using internal notification trigger.")
         while self.is_running:
-            while (time.time() - self.last_notify_timestamp) < self.notify_period:
-                time.sleep(10)
-                if not self.is_running:
-                    return
+            print("ncycle begin")
+            while time.strftime("%H:%M") not in self.notify_schedule:
+                for i in range(5):
+                    print(f"ncycle wait {i}, {self.is_running}")
+                    time.sleep(10)
+                    if not self.is_running:
+                        return
             self.notificating_routine()
             self.last_notify_timestamp = time.time()
 
@@ -475,7 +480,9 @@ class RedmineBot:
         self.scu.server_root = config["redmine_root_url"]
         self.scu.use_https = config["use_https"]
         self.refresh_period = config["refresh_period"]
-        self.notify_period = config["notify_period"]
+        self.notify_schedule = None
+        if "notify_schedule" in config:
+            self.notify_schedule = config["notify_schedule"]
         self.sleep_timeout = config["sleep_timeout"]
         self.user_db_path = Path(config["user_db_path"])
         self.allowed_api_functions = config["allowed_api_functions"][:]
@@ -504,10 +511,15 @@ class RedmineBot:
         self.stop()
         self.start()
 
-    def shutdown(self):
+    def save(self):
         if self.is_running:
             self.stop()
+            restart = True
+        else:
+            restart = False
         self._save_user_db()
+        if restart:
+            self.start()
 
     def _save_user_db(self):
         plain_udb = dict()
