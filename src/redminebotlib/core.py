@@ -441,15 +441,20 @@ class RedmineBot:
             return
         logging.warning("Using internal notification trigger.")
         while self.is_running:
-            print("ncycle begin")
+            # ~ print("ncycle begin")
             while time.strftime("%H:%M") not in self.notify_schedule:
                 for i in range(5):
-                    print(f"ncycle wait {i}, {self.is_running}")
+                    # ~ print(f"ncycle wait {i}, {self.is_running}")
                     time.sleep(10)
                     if not self.is_running:
                         return
             self.notificating_routine()
             self.last_notify_timestamp = time.time()
+            while time.strftime("%H:%M") in self.notify_schedule:
+                # ~ print(f"Wait after notify, {self.is_running}")
+                time.sleep(10)
+                if not self.is_running:
+                    return
 
     def start(self):
         if not self.reply_function:
