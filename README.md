@@ -17,6 +17,9 @@
  - [ ] Механизм определения конца сообщения
  - [ ] Написание документации к проекту
 
+#### Проекты на основе RBL
+[IWTTB](https://github.com/Fe-Ti/ISCRAWebTTBot) ‒ проект бота для мессенджера Telegram.
+
 ```
 Copyright 2023 Fe-Ti aka T.Kravchenko
 ```
