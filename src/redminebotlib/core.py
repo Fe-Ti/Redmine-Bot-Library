@@ -6,14 +6,20 @@ import logging
 import shlex
 import time
 
+logger = logging.getLogger(__name__)
+
+logging.basicConfig(level=logging.INFO)
+    
 from pathlib import Path
 from threading import Thread, Lock, current_thread
 from dataclasses import dataclass, asdict
 
-from .server_control_unit import ServerControlUnit
+from .server_control_unit import RedmineServerControlUnit #, GreenboardServerControlUnit
 from .constants import *
 from .data_structs import User, Message
 from .default_scenery_api_realisation import DefaultSceneryApiRealisation, DefaultApiRealisationTemplates
+
+ServerControlUnit = RedmineServerControlUnit # TODO: implement different task server 
 
 @dataclass
 class PropertyStruct:
@@ -21,14 +27,16 @@ class PropertyStruct:
     preserve_lexeme : bool = False
     say_anyway      : bool = False
     check_input     : bool = False
+    dynamic_hint    : bool = False
 
 class SceneryNode:
-    def __init__(self, name, params_dict):
+    def __init__(self, name, params_dict, api_realisation):
         self.name = name
         self.type = params_dict[Type]
         self.phrase = params_dict[Phrase]
         self.error = params_dict[Error]
         self.info = params_dict[Info]
+        self.api_realisation = api_realisation
 
         self.vars_to_set = None
         if Set in params_dict:
@@ -50,8 +58,21 @@ class SceneryNode:
                 self.properties.check_input = True
             if Say_anyway in params_dict[Properties]:
                 self.properties.say_anyway = True
+            if Dynamic_hint in params_dict[Properties] and Hint in params_dict:
+                self.properties.dynamic_hint = True
         self.next : dict = dict()
-        self._next_lexemes_hint : str = str() # is used in returning hint
+        if self.properties.dynamic_hint:
+            self._next_lexemes_hint : str = params_dict[Hint]
+                                            # hint is callable api function
+                                            # i.e. it is dynamic
+        else:
+            self._next_lexemes_hint : list = list() # hint is just a list (default)
+                                                    # i.e. it is set only once per reload
+            if Hint in params_dict:
+                if type(params_dict[Hint]) is list: # as we need lists, then
+                    self._next_lexemes_hint = params_dict[Hint]
+                else:
+                    logger.warning(f"Found static hint: {params_dict[Hint]}. But it is not list.")
 
     def __repr__(self):
         return f"[{self.name}]"
@@ -80,15 +101,20 @@ class SceneryNode:
     def get_next(self, lexeme):
         return self.next[lexeme.lower()]
 
-    def get_hint_string(self) -> str:
+    def get_hint(self, user) -> list:
         """
-        Returns string with list of possible next lexemes, e.g. "first, second, third"
+        Returns list of possible next lexemes, e.g. [first, second, third]
         """
-        if not self._next_lexemes_hint:
-            for lexeme in self.next.keys():
-                self._next_lexemes_hint += f" {lexeme},"
-            self._next_lexemes_hint = self._next_lexemes_hint[:-1]
-        return self._next_lexemes_hint
+        if self.properties.dynamic_hint: # note this may be slower if function is accessing remote host
+            function = self._next_lexemes_hint
+            return getattr(self.api_realisation, function)(user)
+        elif not self._next_lexemes_hint:
+            # ~ print(self.next)
+            if type(self.next) is dict:
+                for lexeme in self.next.keys():
+                    self._next_lexemes_hint.append(lexeme)
+    #            self._next_lexemes_hint = self._next_lexemes_hint[:-1]
+        return self._next_lexemes_hint # else produce whatever set in scenery 
 
     def is_valid_next(self, lexeme, user = None):
         if lexeme.lower() in self.next:
@@ -137,7 +163,7 @@ class SceneryNode_Get(SceneryNode_Say):
 
 
 class SceneryGraph:
-    def __init__(self, nodes : dict, phrases, errors, infos, root_node_name):
+    def __init__(self, nodes : dict, phrases, errors, infos, root_node_name, api_realisation):
         self.node_count : int = 0
         self.nodes = dict()
         defaults = dict()
@@ -157,7 +183,7 @@ class SceneryGraph:
 
         for node_name, node_params in nodes.items():
             if node_name not in self.nodes:
-                self._create_node(node_name, node_params, phrases, errors, infos, defaults)
+                self._create_node(node_name, node_params, phrases, errors, infos, defaults, api_realisation)
             # Get next nodes
             next_nodes = node_params[Next]
             if not(type(next_nodes) is dict):
@@ -165,11 +191,11 @@ class SceneryGraph:
             # Iterate adding next nodes
             for next_node, lexemes in next_nodes.items():
                 if next_node not in self.nodes: # Check existance
-                    self._create_node(next_node, nodes[next_node], phrases, errors, infos, defaults)
+                    self._create_node(next_node, nodes[next_node], phrases, errors, infos, defaults, api_realisation)
                 node = self[node_name]
                 node.add_next(self[next_node], lexemes)
 
-    def _create_node(self, node_name, params, phrases, errors, infos, defaults):
+    def _create_node(self, node_name, params, phrases, errors, infos, defaults, api_realisation):
         self.node_count += 1
         if Phrase not in params:
             params[Phrase] = defaults[Phrase]
@@ -186,11 +212,11 @@ class SceneryGraph:
             params[Info] = infos[params[Info]]
         ntype = params[Type]
         if ntype == Ask:
-            self[node_name] = SceneryNode_Ask(node_name, params)
+            self[node_name] = SceneryNode_Ask(node_name, params, api_realisation)
         elif ntype == Get:
-            self[node_name] = SceneryNode_Get(node_name, params)
+            self[node_name] = SceneryNode_Get(node_name, params, api_realisation)
         elif ntype == Say:
-            self[node_name] = SceneryNode_Say(node_name, params)
+            self[node_name] = SceneryNode_Say(node_name, params, api_realisation)
         else:
             raise TypeError(f"Can't use type {ntype} for node.")
 
@@ -207,13 +233,15 @@ class RedmineBot:
                     bot_config  : dict,
                     bot_user_key: str,
                     reply_function = None,
-                    api_realisation = DefaultSceneryApiRealisation() ):
+                    api_realisation = DefaultSceneryApiRealisation(),
+                    no_split_on_get = True # don't split when user is on Get node
+                    ):
         """
         "bot_user_key"    -   is used for fetching enumerations and other
                             non-confidential data.
         """
         self.bot_user_key = bot_user_key
-
+        self.no_split_on_get = no_split_on_get
         # From config:
         self.scu = ServerControlUnit(   server_root=bot_config["redmine_root_url"],
                                         use_https=bot_config["use_https"])
@@ -222,7 +250,7 @@ class RedmineBot:
                     api_realisation=api_realisation)
                     
         self.reply_function = reply_function
-        logging.info(f"Reply function set to {self.reply_function}.")
+        logger.info(f"Reply function set to {self.reply_function}.")
 
         # Init enumumerations
         self.issue_statuses = list()    # self.scu.get_issue_statuses(self.bot_user_key)
@@ -231,7 +259,7 @@ class RedmineBot:
 
         self.user_db : dict[str, User] = dict()
         self._load_user_db() # TODO: improve security of database
-        logging.info("Loaded user database.")
+        logger.info("Loaded user database.")
 
         # Initializing multithreading stuff
         self.enum_lock = Lock()
@@ -241,7 +269,7 @@ class RedmineBot:
         self.is_running = False
         self.enum_updater = None
         self.notifier = None
-        logging.info("MT stuff init finished.")
+        logger.info("MT stuff init finished.")
 
     def _set_user_lock(self, user, lock_state : bool):
         self.user_db_lock.acquire()
@@ -250,25 +278,29 @@ class RedmineBot:
                 raise ValueError(f"User {user.uid} lock is already acquired by another thread.")
             user.is_busy = lock_state
         except ValueError as error:
-            logging.error(Error)
+            logger.error(Error)
         finally:
             self.user_db_lock.release()
 
     def _process_user_message(self, message : Message):
         # Initial checks and other stuff
-        content_array = shlex.split(message.content)
-        logging.info(str(content_array))
-        if not content_array:
-            logging.info("Empty content array.")
-            return
         user = self.user_db[message.user_id]
+        content_array = list()
+        if user.state.type == Get and self.no_split_on_get:
+            content_array = [message.content]
+        else:
+            content_array = shlex.split(message.content)
+        logger.info(str(content_array))
+        if not content_array:
+            logger.info("Empty content array.")
+            return
         if content_array[0] in self.scenery_commands[Reset]:
-            logging.info(f"Fully resetting user {user.uid}")
+            logger.info(f"Fully resetting user {user.uid}")
             self.reset_user(user, keep_settings=False)
             self.reply_function(self._get_prompt_message(user))
             return
         elif content_array[0] in self.scenery_commands[Cancel]:
-            logging.info(f"Resetting state and variables of user {user.uid}")
+            logger.info(f"Resetting state and variables of user {user.uid}")
             self.reset_user(user, keep_settings=True)
             self.reply_function(self._get_prompt_message(user))
             return
@@ -281,18 +313,22 @@ class RedmineBot:
             return
         # Check and lock the user (locking may not work properly)
         if user.is_busy:
-            logging.info(f"User {user.uid} is busy")
+            logger.info(f"User {user.uid} is busy")
             return # Just forget about spammers :)
+        logger.info(f"User {user.uid} is locked")
         self._set_user_lock(user=user, lock_state=True)
         try:
             # Here parsing magic happens
             for lex in content_array:
+                if not user.is_busy:
+                    self.reset_user(user, keep_settings=True)
+                    break
                 # ~ print(user.state, lex)
                 if user.state.is_valid_next(lex, user):
                     self._run_state(user, lex)
                     user.state = user.state.get_next(lex)
                     reply = self._get_prompt_message(user)
-                    logging.info(f"Changed state to {user.state}")
+                    logger.info(f"Changed state to {user.state}")
                     if user.state.say_anyway() and not user.state.preserve_lexeme():
                         self.reply_function(reply)
                     while user.state.preserve_lexeme(): # Jumpung through states which preserve lexeme
@@ -302,37 +338,37 @@ class RedmineBot:
                                 self.reply_function(reply)
                             user.state = user.state.get_next(lex)
                             reply = self._get_prompt_message(user)
-                            logging.info(f"Changed state to {user.state}")
+                            logger.info(f"Changed state to {user.state}")
                         else:
                             break
                 else:
                     reply = Message(user.uid, user.state.get_error(lex))
                     break
-            logging.info(f"Reply ready for {user.uid}")
+            logger.info(f"Reply ready for {user.uid}")
             # Reply and unlock user for further conversation
             if not user.state.say_anyway(): # Just for eliminating doubles (for Say_enyway states)
                 self.reply_function(reply)
-            logging.info(f"Replied {user.uid}")
+            logger.info(f"Replied {user.uid}")
             self._set_user_lock(user=user, lock_state=False)
-            logging.info(f"User {user.uid} is free")
+            logger.info(f"User {user.uid} is free")
         except Exception as error:
-            logging.error(error)
+            logger.error(error)
             self._set_user_lock(user=user, lock_state=False)
             raise error
 
     def _get_prompt_message(self, user):
-        if user.state.type == Ask and user.variables[Settings][Show_hints]:
-            return Message( user.uid,
-                        user.state.get_phrase(user) +
-                        self.hint_template.format(user.state.get_hint_string()
-                        ))
-        else:
-            return Message( user.uid,
-                        user.state.get_phrase(user)
+        # ~ if user.state.type == Ask and user.variables[Settings][Show_hints]:
+        return Message( user.uid,
+                    user.state.get_phrase(user),
+                    hint=user.state.get_hint(user)
                         )
+        # ~ else:
+            # ~ return Message( user.uid,
+                        # ~ user.state.get_phrase(user)
+                        # ~ )
 
     def _run_state(self, user, lex=None):
-        logging.info(f"Current state is {user.state}")
+        logger.info(f"Current state is {user.state}")
         user.state.set_vars(user.variables)
         if lex:
             user.state.input_var(user.variables, lex)
@@ -340,15 +376,16 @@ class RedmineBot:
 
     def _call_functions(self, user):
         if self.allowed_api_functions == None:
-            logging.warning("None functions are allowed.")
+            logger.warning("None functions are allowed.")
             return
         state = user.state
         # ~ self.log_to_user(user, f"Start calling functions in state {state}")
-        logging.info(f"Start calling functions in state {state}")
+        logger.info(f"Start calling functions in state {state}")
         # ~ print(user.variables)
+        is_allowed = True
         for function in state.function_list:
             # ~ self.log_to_user(user, f"Function is {function}")
-            logging.info(f"Function is {function}")
+            logger.info(f"Function is {function}")
             if type(function) is list:
                 is_allowed = (function[0] in self.allowed_api_functions) or (self.allowed_api_functions == list())
                 if is_allowed and (eval(function[1])):
@@ -362,7 +399,7 @@ class RedmineBot:
                 if is_allowed:
                     getattr(self.api_realisation, function)(user)
             if not is_allowed:
-                logging.warning(f"{function} is invalid! Check your scenery.")
+                logger.warning(f"{function} is invalid! Check your scenery.")
 
     def reset_user(self, user, keep_settings=True, reset_state=True):
         u_settings = {
@@ -381,6 +418,7 @@ class RedmineBot:
                             }
         if reset_state:
             user.state = self.scenery_states[self.scenery_start_state]
+            self._set_user_lock(user=user, lock_state=False)
 
     def process_user_message(self, message : Message):
         if self.is_running:
@@ -437,9 +475,9 @@ class RedmineBot:
 
     def notificating_cycle(self):
         if not self.notify_schedule:
-            logging.warning("Switched to external notification trigger.")
+            logger.warning("Switched to external notification trigger.")
             return
-        logging.warning("Using internal notification trigger.")
+        logger.warning("Using internal notification trigger.")
         while self.is_running:
             # ~ print("ncycle begin")
             while time.strftime("%H:%M") not in self.notify_schedule:
@@ -491,7 +529,7 @@ class RedmineBot:
         self.sleep_timeout = config["sleep_timeout"]
         self.user_db_path = Path(config["user_db_path"])
         self.allowed_api_functions = config["allowed_api_functions"][:]
-        logging.info("Config and SCU init finished.")
+        logger.info("Config and SCU init finished.")
         # From scenery:
         self.scenery_phrases = scenery[Phrases].copy()
         self.scenery_errors = scenery[Errors].copy()
@@ -502,15 +540,16 @@ class RedmineBot:
                                             self.scenery_phrases,
                                             self.scenery_errors,
                                             self.scenery_infos,
-                                            self.scenery_start_state)
+                                            self.scenery_start_state,
+                                            api_realisation)
         self.hint_template = scenery[Hint_template]
-        logging.info(f"Scenery init finished. {self.scenery_states.node_count} nodes have been loaded.")
+        logger.info(f"Scenery init finished. {self.scenery_states.node_count} nodes have been loaded.")
 
         # From config:
         self.api_realisation = api_realisation
-        logging.info("API realisation is set.")
+        logger.info("API realisation is set.")
         self.api_realisation._change_bot(self)
-        logging.info("API realisation references current bot.")
+        logger.info("API realisation references current bot.")
 
     def restart(self):
         self.stop()

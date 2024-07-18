@@ -11,5 +11,7 @@ class User:
 
 @dataclass
 class Message:
-    user_id : str
-    content : str
+    def __init__(self, user_id:str,content:str,hint:list=None):
+        self.user_id = user_id
+        self.content = content
+        self.hint = hint

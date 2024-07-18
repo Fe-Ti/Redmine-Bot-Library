@@ -4,6 +4,9 @@ from .constants import *
 from .data_structs import User, Message
 
 def get_string_from_enum_list(enum_list, template_list_entry):
+    """
+    Assembles a string from enum and templates for its entries.
+    """
     string = str()
     for entry in enum_list:
         string += template_list_entry.format_map(entry)

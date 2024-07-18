@@ -34,11 +34,15 @@ Properties  = "Properties"  # Determines how the state is interpreted.
                             # Is an array (list) of strings, e.g.:
                             # Properties: [Lexeme_preserving, Phrase_formatting]
 
+Hint        = "Hint"    # A hint for user. Should be either function name or list.
+                        # If a fun.name then that function must return list.
+
 # Property list
 Phrase_formatting   = "Phrase_formatting" # If present, then phrase is formatted like f"..."
 Say_anyway          = "Say_anyway" # If present, then bot sends phrase in any case
 Lexeme_preserving   = "Lexeme_preserving" # If present, then lexeme is preserved for the next state
 Input_checking      = "Input_checking" # If present in Get, then lexeme is checked against Storage[Check_list] (if it exists or not empty)
+Dynamic_hint        = "Dynamic_hint" # If present then hint is defined by a function
 
 # Types
 Say = 0 # Just say and go further

@@ -48,6 +48,95 @@ def _check_mandatory_keys(dictionary, key_list):
             raise ValueError(f"{k} can't be empty.")
 
 class ServerControlUnit:
+    # Project-related methods
+    def get_project_list(self, parameters : dict, user_key : str = None) -> dict:
+        pass
+    def show_project(self, parameters : dict, user_key : str = None) -> dict:
+        pass
+    def create_project(self, parameters : dict, data : dict, user_key : str = None):
+        pass
+    def update_project(self, parameters : dict, data : dict, user_key : str = None):
+        pass
+    def delete_project(self, project_id : int|str, user_key : str = None):
+        pass
+    # Task-related methods
+    def get_issue_list(self, parameters : dict, user_key : str = None):
+        pass
+    def show_issue(self, parameters : dict, user_key : str = None):
+        pass
+    def create_issue(self, parameters : dict, data : dict, user_key : str = None):
+        pass
+    def update_issue(self, parameters : dict, data : dict, user_key : str = None):
+        pass
+    def delete_issue(self, issue_id : int, user_key : str = None):
+        pass
+    def add_watcher(self,
+                        issue_id : int,
+                        new_watcher_uid : int,
+                        user_key : str = None):
+        pass
+    def del_watcher(self,
+                        issue_id : int,
+                        watcher_uid : int,
+                        user_key : str = None):
+        pass
+    def get_project_memberships(self, project_id : int|str, user_key : str = None):
+        pass
+    def get_enum_list(self, enum_path, enum_name, user_key : str = None):
+        pass
+    def get_issue_statuses(self, user_key : str = None) -> dict:
+        pass
+    def get_issue_priorities(self, user_key : str = None) -> dict:
+        pass                        
+    def get_issue_trackers(self, user_key : str = None) -> dict:
+        pass
+
+
+# ~ class GreenboardServerControlUnit(ServerControlUnit):
+    # ~ # Project-related methods
+    # ~ def get_project_list(self, parameters : dict, user_key : str = None) -> dict:
+        
+    # ~ def show_project(self, parameters : dict, user_key : str = None) -> dict:
+        # ~ pass
+    # ~ def create_project(self, parameters : dict, data : dict, user_key : str = None):
+        # ~ pass
+    # ~ def update_project(self, parameters : dict, data : dict, user_key : str = None):
+        # ~ pass
+    # ~ def delete_project(self, project_id : int|str, user_key : str = None):
+        # ~ pass
+    # ~ # Task-related methods
+    # ~ def get_issue_list(self, parameters : dict, user_key : str = None):
+        # ~ pass
+    # ~ def show_issue(self, parameters : dict, user_key : str = None):
+        # ~ pass
+    # ~ def create_issue(self, parameters : dict, data : dict, user_key : str = None):
+        # ~ pass
+    # ~ def update_issue(self, parameters : dict, data : dict, user_key : str = None):
+        # ~ pass
+    # ~ def delete_issue(self, issue_id : int, user_key : str = None):
+        # ~ pass
+    # ~ def add_watcher(self,
+                        # ~ issue_id : int,
+                        # ~ new_watcher_uid : int,
+                        # ~ user_key : str = None):
+        # ~ pass
+    # ~ def del_watcher(self,
+                        # ~ issue_id : int,
+                        # ~ watcher_uid : int,
+                        # ~ user_key : str = None):
+        # ~ pass
+    # ~ def get_project_memberships(self, project_id : int|str, user_key : str = None):
+        # ~ pass
+    # ~ def get_enum_list(self, enum_path, enum_name, user_key : str = None):
+        # ~ pass
+    # ~ def get_issue_statuses(self, user_key : str = None) -> dict:
+        # ~ pass
+    # ~ def get_issue_priorities(self, user_key : str = None) -> dict:
+        # ~ pass                        
+    # ~ def get_issue_trackers(self, user_key : str = None) -> dict:
+        # ~ pass
+
+class RedmineServerControlUnit(ServerControlUnit):
 
     def __init__(self, server_root : str|Path, use_https : bool = True):
         self.server_root = Path(server_root)
@@ -67,6 +156,12 @@ class ServerControlUnit:
 
     def _load_response(self, resp, expected_code):
         """
+        This function unifies response from server. So the return value looks
+        like this:
+        {
+            "data" : <some data>,
+            "Success" : True|False # True if code is expected
+        }
         """
         if resp["code"] == expected_code:
             # ~ print(resp)
@@ -87,6 +182,7 @@ class ServerControlUnit:
                             user_key : str,
                             expected_code : int = 200):
         """
+        Get list of objects. Internal function.
         """
         _check_type(parameters, [dict])
         parameters = self._mix_parameters(parameters, user_key)
@@ -103,6 +199,7 @@ class ServerControlUnit:
                         user_key : str,
                         expected_code : int = 200):
         """
+        Show object. Internal function.
         """
         _check_type(parameters, [dict])
         parameters = self._mix_parameters(parameters, user_key)
@@ -119,6 +216,7 @@ class ServerControlUnit:
                         user_key : str,
                         expected_code : int = 201):
         """
+        Create object. Internal function.
         """
         _check_type(parameters, [dict])
         _check_type(data, [dict])
@@ -137,6 +235,7 @@ class ServerControlUnit:
                         user_key : str,
                         expected_code : int = 204):
         """
+        Update object. Internal function.
         """
         _check_type(parameters, [dict])
         _check_type(data, [dict])
@@ -154,6 +253,7 @@ class ServerControlUnit:
                         user_key : str,
                         expected_code : int = 204):
         """
+        Delete object. Internal function.
         """
         _check_type(object_id, [int, str])
         parameters = {"key" : user_key}
@@ -166,6 +266,7 @@ class ServerControlUnit:
     # Project-related methods
     def get_project_list(self, parameters : dict, user_key : str = None) -> dict:
         """
+        Get list of projects as in Redmine docs.
         """
         http_resp = self._get_object_list(PROJECTS, parameters, user_key)
         return http_resp 
@@ -173,21 +274,25 @@ class ServerControlUnit:
 
     def show_project(self, parameters : dict, user_key : str = None) -> dict:
         """
+        Show project as in Redmine docs.
         """
         return self._show_object(PROJECTS, parameters, user_key)
 
     def create_project(self, parameters : dict, data : dict, user_key : str = None):
         """
+        Create project with parameters defined in Redmine docs.
         """
         return self._create_object(PROJECTS, parameters, {"project" : data}, user_key)
 
     def update_project(self, parameters : dict, data : dict, user_key : str = None):
         """
+        Update project with parameters defined in Redmine docs.
         """
         return self._update_object(PROJECTS, parameters, {"project" : data}, user_key)
 
     def delete_project(self, project_id : int|str, user_key : str = None):
         """
+        Delete project.
         """
         return self._delete_object(PROJECTS, project_id, user_key)
 
@@ -239,11 +344,17 @@ class ServerControlUnit:
                             user_key)
     
     def get_project_memberships(self, project_id : int|str, user_key : str = None):
+        """
+        Gets members of specified project.
+        """
         return self._get_object_list(PROJECTS / str(project_id) / PROJECTS_MEMBERSHIPS,
                                         dict(),
                                         user_key)
 
     def get_enum_list(self, enum_path, enum_name, user_key : str = None):
+        """
+        Gets enumeration or enum-like list of objects.
+        """
         resp = self._get_object_list(enum_path,
                                         dict(),
                                         user_key)
