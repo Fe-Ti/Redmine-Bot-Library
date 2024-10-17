@@ -23,11 +23,12 @@ ServerControlUnit = RedmineServerControlUnit # TODO: implement different task se
 
 @dataclass
 class PropertyStruct:
-    format_phrase   : bool = False
-    preserve_lexeme : bool = False
-    say_anyway      : bool = False
-    check_input     : bool = False
-    dynamic_hint    : bool = False
+    format_phrase   : bool = False # use formatting
+    preserve_lexeme : bool = False # don't change lexeme when going to next
+    say_anyway      : bool = False # ignore muting
+    check_input     : bool = False # check input against hint
+    dynamic_hint    : bool = False # generate hint by some function
+    alter_next      : bool = False # only for Get
 
 class SceneryNode:
     def __init__(self, name, params_dict, api_realisation):
@@ -37,6 +38,10 @@ class SceneryNode:
         self.error = params_dict[Error]
         self.info = params_dict[Info]
         self.api_realisation = api_realisation
+
+        self.next = dict()
+        self.alter_next = dict() # Should be used in Get... but maybe we will 
+        self.alter_hint = list() # have fun with undefined behaviour :)
 
         self.vars_to_set = None
         if Set in params_dict:
@@ -60,11 +65,12 @@ class SceneryNode:
                 self.properties.say_anyway = True
             if Dynamic_hint in params_dict[Properties] and Hint in params_dict:
                 self.properties.dynamic_hint = True
-        self.next : dict = dict()
-        if self.properties.dynamic_hint:
+            if Alter_next in params_dict[Properties] and Hint in params_dict:
+                self.properties.alter_next = True
+        if self.properties.dynamic_hint: 
             self._next_lexemes_hint : str = params_dict[Hint]
-                                            # hint is callable api function
-                                            # i.e. it is dynamic
+                                    # params_dict[Hint] is callable api function
+                                    # i.e. it is dynamic
         else:
             self._next_lexemes_hint : list = list() # hint is just a list (default)
                                                     # i.e. it is set only once per reload
@@ -78,6 +84,8 @@ class SceneryNode:
         return f"[{self.name}]"
 
     def input_var(self, variables_dict : dict, user_input):
+        if user_input in self.alter_hint:
+            return
         if not self.var_to_input:
             return
         for category in self.var_to_input.keys():
@@ -94,11 +102,17 @@ class SceneryNode:
                     variables_dict[category][name] = value
 
     def add_next(self, next_node, lexemes):
+        """
+        Adds next node which corresponds to lexemes
+        """
         for lexeme in lexemes:
             lexeme = lexeme.lower()
             self.next[lexeme] = next_node
 
     def get_next(self, lexeme):
+        """
+        Returns node depending on lexeme
+        """
         return self.next[lexeme.lower()]
 
     def get_hint(self, user) -> list:
@@ -107,11 +121,13 @@ class SceneryNode:
         """
         if self.properties.dynamic_hint: # note this may be slower if function is accessing remote host
             function = self._next_lexemes_hint
+            if self.properties.alter_next:
+                return getattr(self.api_realisation, function)(user)+self.alter_hint
             return getattr(self.api_realisation, function)(user)
-        elif not self._next_lexemes_hint:
-            # ~ print(self.next)
-            if type(self.next) is dict:
-                for lexeme in self.next.keys():
+        if not self._next_lexemes_hint: # If hint is empty then cache lexeme list
+            if type(self.next) is dict: # if it exists.
+                lexemes = self.next.keys()
+                for lexeme in lexemes:
                     self._next_lexemes_hint.append(lexeme)
     #            self._next_lexemes_hint = self._next_lexemes_hint[:-1]
         return self._next_lexemes_hint # else produce whatever set in scenery 
@@ -123,6 +139,9 @@ class SceneryNode:
             return False
 
     def get_phrase(self, user):
+        """
+        Format and/or just return string.
+        """
         if self.properties.format_phrase:
             return self.phrase.format(**user.variables)
         else:
@@ -137,7 +156,6 @@ class SceneryNode:
     def say_anyway(self):
         return self.properties.say_anyway
 
-
 class SceneryNode_Ask(SceneryNode):
     pass
 
@@ -149,18 +167,33 @@ class SceneryNode_Say(SceneryNode):
         return self.next
 
     def is_valid_next(self, lexeme, user):
-        if (not self.properties.check_input) or (Check_list not in user.variables[Storage]):
-            return True
-        elif not user.variables[Storage][Check_list]:
-            return True
-        elif lexeme in user.variables[Storage][Check_list]:
-            return True
+        return True
+
+class SceneryNode_Get(SceneryNode):
+    def add_next(self, next_node, lexemes = None):
+        if not lexemes:
+            self.next = next_node
+        elif self.properties.alter_next:
+            for lexeme in lexemes:
+                lexeme = lexeme.lower()
+                self.alter_next[lexeme] = next_node
+            self.alter_hint = list(self.alter_next.keys())
         else:
-            return False
+            raise ValueError("Recieved not None without Alter_next property in node.")
 
-class SceneryNode_Get(SceneryNode_Say):
-    pass
-
+    def get_next(self, lexeme):
+        lexeme = lexeme.lower()
+        if self.properties.alter_next:
+            if lexeme in self.alter_next:
+                return self.alter_next[lexeme]
+        return self.next
+    
+    def is_valid_next(self, lexeme, user):
+        if self.properties.alter_next and lexeme in self.alter_hint:
+            return True
+        if self.properties.check_input:
+            return (lexeme in self.get_hint())
+        return True
 
 class SceneryGraph:
     def __init__(self, nodes : dict, phrases, errors, infos, root_node_name, api_realisation):
@@ -188,6 +221,9 @@ class SceneryGraph:
             next_nodes = node_params[Next]
             if not(type(next_nodes) is dict):
                 next_nodes = { next_nodes : None }
+            if Alter_next in node_params:
+                for node,lexemes in node_params[Alter_next].items():
+                    next_nodes[node] = lexemes
             # Iterate adding next nodes
             for next_node, lexemes in next_nodes.items():
                 if next_node not in self.nodes: # Check existance
@@ -233,12 +269,22 @@ class RedmineBot:
                     bot_config  : dict,
                     bot_user_key: str,
                     reply_function = None,
+                    udb_loading_function = None,
+                    udb_saving_function = None,
                     api_realisation = DefaultSceneryApiRealisation(),
                     no_split_on_get = True # don't split when user is on Get node
                     ):
         """
-        "bot_user_key"    -   is used for fetching enumerations and other
-                            non-confidential data.
+        Parameters:
+            bot_scenery : dict  -   scenery graph as dictionary,
+            bot_config  : dict  -   bot configuration,
+            bot_user_key: str   -   key to be used for fetching enumerations and other
+                                    non-confidential data,
+            reply_function = None       -   function for replying,
+            udb_loading_function = None -   function for loading user DB (optional),
+            udb_saving_function = None  -   function for saving user DB (optional),
+            api_realisation = DefaultSceneryApiRealisation()    - API realisation used by scenery,
+            no_split_on_get = True      -   if set True don't split new input when user is on Get node type.
         """
         self.bot_user_key = bot_user_key
         self.no_split_on_get = no_split_on_get
@@ -251,6 +297,20 @@ class RedmineBot:
                     
         self.reply_function = reply_function
         logger.info(f"Reply function set to {self.reply_function}.")
+        
+        if udb_saving_function:
+            if udb_loading_function:
+                self._udb_saving_function = udb_saving_function
+                self._udb_loading_function = udb_loading_function
+            else:
+                raise ValueError("You must specify udb_loading_function if you set udb_saving_function.")
+        else:
+            if udb_loading_function:
+                raise ValueError("You must specify udb_saving_function if you set udb_loading_function.")
+            else:
+                self._udb_saving_function = self._default_udb_saving_function
+                self._udb_loading_function = self._default_udb_loading_function
+                logger.info("Using default JSON for storing user DB.")
 
         # Init enumumerations
         self.issue_statuses = list()    # self.scu.get_issue_statuses(self.bot_user_key)
@@ -258,7 +318,7 @@ class RedmineBot:
         self.issue_priorities = list()  # self.scu.get_issue_priorities(self.bot_user_key)
 
         self.user_db : dict[str, User] = dict()
-        self._load_user_db() # TODO: improve security of database
+        self._udb_loading_function() #load_user_db() # TODO: improve security of database
         logger.info("Loaded user database.")
 
         # Initializing multithreading stuff
@@ -331,7 +391,7 @@ class RedmineBot:
                     logger.info(f"Changed state to {user.state}")
                     if user.state.say_anyway() and not user.state.preserve_lexeme():
                         self.reply_function(reply)
-                    while user.state.preserve_lexeme(): # Jumpung through states which preserve lexeme
+                    while user.state.preserve_lexeme(): # Jumping through states which preserve lexeme
                         if user.state.is_valid_next(lex, user):
                             self._run_state(user, lex)
                             if user.state.say_anyway():
@@ -561,25 +621,49 @@ class RedmineBot:
             restart = True
         else:
             restart = False
-        self._save_user_db()
+        self._udb_saving_function()
         if restart:
             self.start()
 
-    def _save_user_db(self):
+    def dump_user_db(self):
+        """
+        Dump user_db into serializable dictionary. Can be used for customizing
+        save/load process.
+        
+        Returns dictionary which corresponds to user data and state.
+        """
         plain_udb = dict()
         for uid, user in self.user_db.items():
             plain_udb[uid] = asdict(user)
             plain_udb[uid]["state"] = user.state.name
+        return plain_udb
+
+    def load_user_db(self, raw_data):
+        """
+        Load data from dictionary (`raw_data`) into RedmineBot instance user_db.
+        If you want to customize user DB save/load then use this function for
+        loading from dictionary, which was produced by dump_user_db() function.
+        """
+        for uid, udata in raw_data.items():
+            state_name = udata.pop("state")
+            self.user_db[uid] = User(**udata)
+            self.user_db[uid].state = self.scenery_states[state_name]
+
+    def _default_udb_saving_function(self):
+        """
+        By default save user DB into JSON... I know, not very secure :)
+        """
+        plain_udb = self.dump_user_db()
         with open(self.user_db_path, 'w') as udb_file:
             udb_file.write(json.dumps(plain_udb))
-
-    def _load_user_db(self):
+    
+    def _default_udb_loading_function(self):
+        """
+        By default load user DB from JSON.
+        """
         try:
             with open(self.user_db_path, 'r') as udb_file:
                 raw_data = json.loads(udb_file.read())
-            for uid, udata in raw_data.items():
-                state_name = udata.pop("state")
-                self.user_db[uid] = User(**udata)
-                self.user_db[uid].state = self.scenery_states[state_name]
+                self.load_user_db(raw_data)
         except OSError:
             pass

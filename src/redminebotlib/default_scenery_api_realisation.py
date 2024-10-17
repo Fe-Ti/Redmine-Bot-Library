@@ -42,6 +42,9 @@ class DefaultApiRealisationTemplates:
     pass
 
 class DefaultSceneryApiRealisation:
+    """
+    A class with default functions used by core class.
+    """
     def __init__(self, bot = None, templates = DefaultApiRealisationTemplates()):
         self.bot = bot
         self.templates = templates

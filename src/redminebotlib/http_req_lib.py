@@ -28,6 +28,7 @@ def make_url(
         parameters_string = parameters
     else:
         raise TypeError("Parameters should be either in dict or URL parameters string form")
+    print( f"{scheme}://{server_root / resource_path}{api_format}?{parameters_string}")
     return f"{scheme}://{server_root / resource_path}{api_format}?{parameters_string}"
 
 # HTTP Requests -- all of them return response string

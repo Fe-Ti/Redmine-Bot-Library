@@ -43,6 +43,9 @@ Say_anyway          = "Say_anyway" # If present, then bot sends phrase in any ca
 Lexeme_preserving   = "Lexeme_preserving" # If present, then lexeme is preserved for the next state
 Input_checking      = "Input_checking" # If present in Get, then lexeme is checked against Storage[Check_list] (if it exists or not empty)
 Dynamic_hint        = "Dynamic_hint" # If present then hint is defined by a function
+Alter_next          = "Alter_next"  # If present in Get then node can transition
+                                    # to alternative node. E.g. may be used for
+                                    # pagination in long lists.
 
 # Types
 Say = 0 # Just say and go further
